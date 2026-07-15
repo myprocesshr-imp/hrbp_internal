@@ -483,10 +483,8 @@ export function initEmployeeRequests(container) {
   };
 
   const triggerPrintPdf = async (data, reqId) => {
-    showToast('กำลังเปิดหน้าตัวอย่างเอกสาร...', 'hourglass_top');
     try {
       await previewCertificate(data, false);
-      showToast('เปิดหน้าเอกสารสำเร็จ', 'download_done');
     } catch (err) {
       console.error('PDF preview failed:', err);
       showToast('ไม่สามารถเปิดเอกสารได้', 'info');
