@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <title>Purge User — HRBP Internal</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
+    pre { background: #f1f5f9; padding: 1rem; border-radius: 8px; overflow: auto; }
+    .ok { color: #166534; } .warn { color: #92400e; }
+    button { padding: 0.6rem 1.2rem; background: #00236f; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
+    input { padding: 0.5rem; border: 1px solid #ccc; border-radius: 6px; width: 200px; }
+  </style>
+</head>
+<body>
+  <h1>ลบข้อมูลผู้ใช้ (localStorage)</h1>
+  <p>ใช้ก่อนให้พนักงานล็อกอินใหม่ — ลบ user + คำขอที่เกี่ยวข้องจาก browser storage</p>
+  <p>
+    <label>Username: <input id="username" value="ronnachai_w" /></label>
+    <button id="run">ลบข้อมูล</button>
+  </p>
+  <pre id="log"></pre>
+  <script>
+    function log(msg, cls) {
+      const el = document.getElementById('log');
+      const line = document.createElement('div');
+      if (cls) line.className = cls;
+      line.textContent = msg;
+      el.appendChild(line);
+    }
+    function purgeUser(username) {
+      const USER = username.trim().toLowerCase();
+      if (!USER) { log('กรุณาระบุ username', 'warn'); return; }
+      document.getElementById('log').innerHTML = '';
+      const match = u => (u.username || '').toLowerCase() === USER
+        || (u.email || '').toLowerCase().includes(USER);
+
+      let users = JSON.parse(localStorage.getItem('hrbp_mock_users') || '[]');
+      const removed = users.filter(match);
+      users = users.filter(u => !match(u));
+      localStorage.setItem('hrbp_mock_users', JSON.stringify(users));
+      log(`ลบจาก hrbp_mock_users: ${removed.length} รายการ`, removed.length ? 'ok' : 'warn');
+      removed.forEach(u => log(`  - ${u.username} (${u.full_name || '-'}) id=${u.id}`));
+
+      const emails = removed.map(u => u.email).filter(Boolean);
+      const empIds = removed.map(u => u.emp_id).filter(Boolean);
+
+      const reqKey = 'hrbp_employee_requests';
+      let reqs = JSON.parse(localStorage.getItem(reqKey) || '[]');
+      const before = reqs.length;
+      reqs = reqs.filter(r => !emails.includes(r.user_email) && !empIds.some(id => (r.emp_id || '') === id));
+      localStorage.setItem(reqKey, JSON.stringify(reqs));
+      log(`ลบคำขอ: ${before - reqs.length} จาก ${before}`, 'ok');
+
+      const pendKey = 'hrbp_pending_requests';
+      let pend = JSON.parse(localStorage.getItem(pendKey) || '[]');
+      const pendBefore = pend.length;
+      pend = pend.filter(r => !emails.includes(r.user_email));
+      localStorage.setItem(pendKey, JSON.stringify(pend));
+      log(`ลบ pending: ${pendBefore - pend.length} จาก ${pendBefore}`, 'ok');
+
+      const cur = JSON.parse(localStorage.getItem('hrbp_user') || 'null');
+      if (cur && match(cur)) {
+        localStorage.removeItem('hrbp_user');
+        log('ลบ session ปัจจุบัน (hrbp_user)', 'ok');
+      }
+
+      log(removed.length ? `เสร็จแล้ว — ${USER} สามารถล็อกอินใหม่ได้` : `ไม่พบ ${USER} ใน localStorage`, removed.length ? 'ok' : 'warn');
+    }
+    document.getElementById('run').addEventListener('click', () => purgeUser(document.getElementById('username').value));
+    if (new URLSearchParams(location.search).get('auto') === '1') {
+      purgeUser(document.getElementById('username').value);
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+.output/
+
+# Environment secrets
+.env
+*.local
+
+# Cloudflare Wrangler local state
+.wrangler/
+cloudflare/.wrangler/
+
+# OS/Editor
+.DS_Store
+Thumbs.db
+
+# Debug/Test artifacts
+final_test.txt
+test_api.txt
+test_api2.txt
+test_home.html
+app/terminals/
+
+# Prototype screenshots (historical)
+_1/
+_2/
+_3/
+hr_admin_1/
+hr_admin_2/
+hrbp_internal/
+
+# Tooling configs (not needed for deployment)
+.aionrs/
+.opencode/
+.zcode/

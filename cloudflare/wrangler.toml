@@ -1,0 +1,15 @@
+name = "hrbp-system"
+compatibility_date = "2025-04-01"
+pages_build_output_dir = "../app/dist"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "hrbp-db"
+database_id = "44ae12b1-5a4d-4eaa-907c-aabee49da46a"
+
+[[r2_buckets]]
+binding = "HRBP_BUCKET"
+bucket_name = "hrbp-internal"
+
+[vars]
+ENVIRONMENT = "production"

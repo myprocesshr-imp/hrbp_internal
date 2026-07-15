@@ -1,0 +1,4 @@
+DROP TABLE IF EXISTS requests;
+DROP TABLE IF EXISTS templates;
+DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS business_units;

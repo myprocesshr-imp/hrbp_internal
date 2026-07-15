@@ -1,0 +1,640 @@
+/* ========================================
+   HRBP Internal — Global Styles
+   Corporate Clarity Design System
+   ======================================== */
+
+/* Base */
+body {
+  font-family: 'Noto Sans Thai', 'Inter', sans-serif;
+  background-color: #F8FAFC;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Material Symbols baseline */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  vertical-align: middle;
+}
+
+/* ========================================
+   Cards & Elevation
+   ======================================== */
+.tonal-card {
+  background-color: #FFFFFF;
+  box-shadow: 0px 2px 4px rgba(30, 41, 59, 0.05);
+  border-radius: 0.5rem;
+}
+
+.card-shadow {
+  box-shadow: 0px 2px 8px rgba(30, 41, 59, 0.04);
+}
+
+.card-shadow-hover {
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+.card-shadow-hover:hover {
+  box-shadow: 0px 8px 24px rgba(30, 41, 59, 0.08);
+  transform: translateY(-2px);
+}
+
+/* ========================================
+   Glass Effect (Header)
+   ======================================== */
+.glass-header {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* ========================================
+   Input transitions
+   ======================================== */
+input, select, textarea {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Radio card styling */
+.radio-card input:checked + .radio-content {
+  border-color: #00236f;
+  background-color: rgba(220, 225, 255, 0.3);
+  color: #00236f;
+}
+
+/* ========================================
+   Active Tracker Pulse Animation
+   ======================================== */
+.active-tracker-dot::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 12px;
+  height: 12px;
+  background-color: currentColor;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%   { transform: translate(-50%, -50%) scale(1); opacity: 0.5; }
+  70%  { transform: translate(-50%, -50%) scale(2); opacity: 0; }
+  100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
+}
+
+/* ========================================
+   Scrollbar
+   ======================================== */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #c5c5d3; border-radius: 10px; }
+
+/* ========================================
+   Page Title (consistent across all menus)
+   ======================================== */
+.page-title {
+  font-family: 'Noto Sans Thai', 'Inter', sans-serif;
+  font-size: 28px;
+  line-height: 36px;
+  letter-spacing: -0.01em;
+  font-weight: 700;
+  color: #00236f;
+}
+
+.page-subtitle {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 400;
+  color: #444651;
+  margin-top: 4px;
+}
+
+/* ========================================
+   Page Transition
+   ======================================== */
+.page-enter {
+  animation: fadeIn 0.25s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ========================================
+   Chart placeholder (Admin Dashboard)
+   ======================================== */
+.chart-bar {
+  transition: height 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 4px 4px 0 0;
+}
+
+/* ========================================
+   Login Page
+   ======================================== */
+.login-card {
+  box-shadow: 0px 4px 24px rgba(30, 41, 59, 0.08);
+}
+
+/* ========================================
+   Sidebar active indicator
+   ======================================== */
+.nav-active {
+  background-color: #d5e4f8;
+  color: #576676;
+  font-weight: 700;
+}
+
+/* ========================================
+   Badge Variants
+   ======================================== */
+.badge-draft      { background: #f1f5f9; color: #64748b; }
+.badge-submitted  { background: rgba(0, 35, 111, 0.1); color: #00236f; }
+.badge-in-review  { background: #fef3c7; color: #92400e; }
+.badge-approved   { background: #dcfce7; color: #166534; }
+.badge-rejected   { background: #fee2e2; color: #991b1b; }
+.badge-published  { background: #dcfce7; color: #166534; }
+.badge-critical   { background: #fee2e2; color: #991b1b; }
+.badge-warning    { background: #fef3c7; color: #92400e; }
+
+/* ========================================
+   Responsive helpers
+   ======================================== */
+@media (max-width: 767px) {
+  .hide-mobile { display: none !important; }
+}
+
+/* ========================================
+   Certificate Builder Chrome (toolbar / overlays)
+   Tailwind CDN does not scan JS-injected HTML — use plain CSS here.
+   ======================================== */
+#cb-root {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #f3f4f6;
+  font-family: 'Noto Sans Thai', 'Inter', sans-serif;
+  pointer-events: auto;
+}
+
+#cb-canvas {
+  flex: 1;
+  min-height: 0;
+  margin-top: 4.5rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  justify-content: center;
+  padding: 2rem 1rem;
+  position: relative;
+  z-index: 1;
+  /* Let clicks reach fixed toolbar above the scroll area */
+  pointer-events: none;
+}
+
+#cb-canvas #cb-a4 {
+  pointer-events: auto;
+}
+
+#cb-toolbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4.5rem;
+  z-index: 100050;
+  pointer-events: auto !important;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.5rem;
+  gap: 1rem;
+  background: #faf8ff;
+  border-bottom: 1px solid #c5c5d3;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  font-family: 'Noto Sans Thai', 'Inter', sans-serif;
+  color: #1a1b21;
+}
+
+#cb-toolbar button,
+#cb-toolbar select {
+  pointer-events: auto !important;
+  cursor: pointer;
+}
+
+.cb-toolbar-left,
+.cb-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.cb-toolbar-right {
+  flex-shrink: 0;
+}
+
+.cb-toolbar-brand-icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.75rem;
+  background: #00236f;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.cb-toolbar-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #00236f;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.cb-toolbar-subtitle {
+  font-size: 12px;
+  color: #757682;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 600;
+  margin: 0.2rem 0 0;
+}
+
+.cb-toolbar-divider {
+  width: 1px;
+  height: 2rem;
+  background: #c5c5d3;
+  flex-shrink: 0;
+}
+
+.cb-toolbar-tmpl {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.cb-toolbar-tmpl-label {
+  font-size: 14px;
+  color: #757682;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.cb-toolbar-tmpl-select {
+  font-size: 14px;
+  font-weight: 500;
+  padding: 0.5rem 1.75rem 0.5rem 0.75rem;
+  border: 1px solid #c5c5d3;
+  border-radius: 0.5rem;
+  background: #f4f3fa;
+  color: #1a1b21;
+  outline: none;
+}
+
+.cb-toolbar-center {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #dce1ff;
+  border: 1px solid rgba(0, 35, 111, 0.2);
+  border-radius: 0.5rem;
+  padding: 0.35rem 0.75rem;
+  flex-shrink: 0;
+}
+
+.cb-toolbar-center span#cb-docid-badge {
+  font-size: 14px;
+  font-weight: 600;
+  color: #00236f;
+}
+
+.cb-lang-toggle {
+  display: flex;
+  background: #eeedf4;
+  border: 1px solid #c5c5d3;
+  border-radius: 0.5rem;
+  padding: 2px;
+  gap: 2px;
+}
+
+.cb-lang-btn {
+  border: none;
+  background: transparent;
+  padding: 0.35rem 0.85rem;
+  border-radius: 0.35rem;
+  font-size: 14px;
+  font-weight: 600;
+  color: #444651;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.cb-lang-btn.active {
+  background: #00236f;
+  color: #fff;
+}
+
+.cb-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 14px;
+  font-weight: 500;
+  border: 1px solid #c5c5d3;
+  background: #eeedf4;
+  color: #1a1b21;
+  cursor: pointer;
+  font-family: inherit;
+  line-height: 1.25;
+}
+
+.cb-toolbar-btn .material-symbols-outlined {
+  font-size: 18px !important;
+}
+
+.cb-toolbar-btn-save {
+  background: #059669;
+  border-color: #059669;
+  color: #fff;
+  font-weight: 700;
+}
+
+.cb-toolbar-btn-print {
+  background: #00236f;
+  border-color: #00236f;
+  color: #fff;
+  font-weight: 700;
+}
+
+.cb-toolbar-btn-close:hover {
+  background: #fce8e6;
+  color: #b3261e;
+  border-color: rgba(179, 38, 30, 0.3);
+}
+
+@media (max-width: 900px) {
+  .cb-toolbar-divider,
+  .cb-toolbar-tmpl-label,
+  .cb-toolbar-center,
+  .cb-toolbar-btn span:not(.material-symbols-outlined) {
+    display: none;
+  }
+}
+
+#cb-sig-panel {
+  display: none !important;
+  visibility: hidden !important;
+  position: fixed;
+  right: 0;
+  top: 0;
+  height: 100%;
+  width: 20rem;
+  z-index: 100040;
+  flex-direction: column;
+  background: #fff;
+  box-shadow: -8px 0 30px rgba(0, 0, 0, 0.12);
+  pointer-events: none !important;
+  transform: translateX(100%);
+  font-family: 'Noto Sans Thai', 'Inter', sans-serif;
+}
+
+#cb-sig-panel.cb-sig-panel-open {
+  display: flex !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+  transform: translateX(0);
+}
+
+.cb-sig-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #c5c5d3;
+  background: #f4f3fa;
+  flex-shrink: 0;
+}
+
+.cb-sig-panel-header h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1a1b21;
+  line-height: 1;
+}
+
+.cb-sig-panel-header p {
+  margin: 2px 0 0;
+  font-size: 10px;
+  color: #757682;
+}
+
+.cb-sig-panel-close {
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: #757682;
+  cursor: pointer;
+}
+
+.cb-sig-panel-close:hover {
+  background: #e9e7ef;
+}
+
+#cb-sig-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+}
+
+#cb-toast {
+  position: fixed;
+  inset: 0;
+  z-index: 10003;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#cb-toast .cb-toast-card {
+  pointer-events: auto;
+  font-family: 'Noto Sans Thai', Inter, sans-serif;
+  animation: cb-toast-bounce-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+#cb-toast .cb-toast-card.cb-toast-leaving {
+  animation: cb-toast-fade-out 0.3s ease-in forwards;
+}
+
+@keyframes cb-toast-bounce-in {
+  0%   { opacity: 0; transform: scale(0.72) translateY(-24px); }
+  60%  { opacity: 1; transform: scale(1.04) translateY(4px); }
+  80%  { transform: scale(0.98) translateY(-2px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes cb-toast-fade-out {
+  0%   { opacity: 1; transform: scale(1) translateY(0); }
+  100% { opacity: 0; transform: scale(0.88) translateY(12px); }
+}
+
+/* ========================================
+   Certificate Builder Template Cleansing
+   ======================================== */
+/* Fallback mode: hide duplicate template sections inside cb-body (outer chrome is used) */
+#cb-a4:not(.cb-using-stored-template) #cb-body .watermark,
+#cb-a4:not(.cb-using-stored-template) #cb-body .header,
+#cb-a4:not(.cb-using-stored-template) #cb-body .cert-number-row,
+#cb-a4:not(.cb-using-stored-template) #cb-body .doc-title,
+#cb-a4:not(.cb-using-stored-template) #cb-body .signature-area,
+#cb-a4:not(.cb-using-stored-template) #cb-body .footer {
+  display: none !important;
+}
+
+/* Stored-template mode: use template layout (header, body, signature, footer) */
+#cb-a4.cb-using-stored-template #cb-outer-watermark,
+#cb-a4.cb-using-stored-template #cb-outer-header,
+#cb-a4.cb-using-stored-template #cb-outer-docnumber,
+#cb-a4.cb-using-stored-template #cb-outer-doctitle,
+#cb-a4.cb-using-stored-template #cb-outer-signature,
+#cb-a4.cb-using-stored-template #cb-outer-footer {
+  display: none !important;
+}
+
+#cb-a4.cb-using-stored-template {
+  height: 297mm;
+  max-height: 297mm;
+  overflow: hidden;
+}
+
+#cb-a4.cb-using-stored-template #cb-body {
+  margin: 0 !important;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+#cb-a4.cb-using-stored-template #cb-body .cert-page {
+  flex: 1;
+  width: 100%;
+  height: 297mm;
+  min-height: 297mm;
+  max-height: 297mm;
+  overflow: hidden;
+}
+
+#cb-a4.cb-using-stored-template #cb-body .body-text {
+  flex: 0 0 auto !important;
+  margin-bottom: 0 !important;
+}
+
+#cb-a4.cb-using-stored-template #cb-body .signature-area {
+  display: flex !important;
+  margin-top: 8mm !important;
+  margin-bottom: 0 !important;
+  padding-top: 0 !important;
+}
+
+#cb-a4.cb-using-stored-template #cb-body .footer,
+#cb-a4.cb-using-stored-template #cb-body .cb-cert-footer {
+  margin-top: auto !important;
+}
+
+#cb-a4.cb-using-stored-template #cb-body .signature-area .issue-date {
+  margin-bottom: 1.5mm !important;
+}
+
+#cb-a4.cb-using-stored-template #cb-body #cb-sig-box {
+  height: 68px !important;
+  margin-bottom: 1mm !important;
+}
+
+#cb-a4.cb-using-stored-template #cb-body #cb-mgr-pos {
+  margin-top: 0 !important;
+}
+
+#cb-a4.cb-using-stored-template #cb-body .watermark {
+  display: block !important;
+}
+
+#cb-a4.cb-using-stored-template #cb-body .footer,
+#cb-a4.cb-using-stored-template #cb-body .cb-cert-footer {
+  overflow: visible;
+  position: relative;
+  z-index: 2;
+}
+
+/* Remark dropdown — full hit area over editable text */
+#cb-a4 #cb-rmk-select,
+#cb-a4.cb-using-stored-template #cb-body #cb-rmk-select {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  opacity: 0 !important;
+  cursor: pointer !important;
+  z-index: 2 !important;
+  margin: 0 !important;
+  border: none !important;
+  appearance: auto;
+  -webkit-appearance: menulist;
+}
+
+#cb-a4 #cb-rmk-text {
+  position: relative;
+  z-index: 1;
+}
+
+#cb-root #cb-a4 [id="cb-rmk-text"],
+#cb-root #cb-a4 [id="cb-issue-date"],
+#cb-root #cb-a4 [id="cb-mgr-display"],
+#cb-root #cb-a4 [id="cb-header-hr-phone"],
+#cb-root #cb-a4 [id="cb-emp-salary"] {
+  color: #1a73e8;
+  border-bottom: 1.5px dashed #1a73e8;
+}
+
+#cb-root #cb-a4 [id="cb-rmk-text"] {
+  color: #1a1a1a;
+}
+
+/* Builder preview only — blue edit chrome */
+#cb-root .cb-off-select-visible {
+  font-family: inherit;
+  font-size: 16pt;
+  font-weight: bold;
+  color: #1a73e8;
+  border: none;
+  border-bottom: 1.5px dashed #1a73e8;
+  background: transparent;
+  padding: 0 2px;
+  margin: 0 2px;
+  cursor: pointer;
+  max-width: 100%;
+  vertical-align: baseline;
+  appearance: auto;
+  -webkit-appearance: menulist;
+}
+
+#cb-root .cb-off-select-visible:focus {
+  outline: 2px solid rgba(26, 115, 232, 0.35);
+  outline-offset: 1px;
+}
+

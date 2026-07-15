@@ -1,0 +1,21 @@
+{
+  "name": "hrbp-internal",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "sql.js": "^1.14.1",
+    "vite": "^6.3.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.108.0",
+    "html2canvas": "^1.4.1",
+    "js-md5": "^0.8.3",
+    "jspdf": "^4.2.1"
+  }
+}

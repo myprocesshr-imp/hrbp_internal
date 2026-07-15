@@ -1,0 +1,23 @@
+{
+  "name": "hrbp-internal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "HRBP Internal — ระบบจัดการเอกสารใบรับรอง",
+  "workspaces": ["app", "cloudflare"],
+  "scripts": {
+    "dev":               "npm run dev --workspace=app",
+    "dev:all":           "concurrently -n app,api -c blue,green \"npm run dev --workspace=app\" \"npm run dev --workspace=cloudflare\"",
+    "dev:frontend":      "npm run dev --workspace=app",
+    "dev:backend":       "npm run dev --workspace=cloudflare",
+    "build":             "npm run build --workspace=app",
+    "deploy":            "npm run deploy --workspace=cloudflare",
+    "migrate":           "npm run migrate --workspace=cloudflare",
+    "migrate:local":     "npm run migrate:local --workspace=cloudflare",
+    "migrate:all":       "npm run migrate:all --workspace=cloudflare",
+    "migrate:all:local": "npm run migrate:all:local --workspace=cloudflare",
+    "init-local-db":     "npm run init-local-db --workspace=cloudflare"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}
