@@ -181,10 +181,10 @@ function computeDashboardData(data) {
   const requests = data?.requests || [];
 
   const today = new Date();
-  const todayLabel = `${today.getDate()} ${t('month.short')[today.getMonth()]} ${today.getFullYear() + 543}`;
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
   const completedToday = requests.filter(r => {
-    const d = r.created_at || '';
-    return d.includes(todayLabel);
+    const d = r.created_at || r.date || '';
+    return d.includes(todayIso) || d.includes(`${today.getDate()} ${t('month.short')[today.getMonth()]}`);
   }).length;
 
   const pendingReqs = requests.filter(r => r.status === 'submitted' || r.status === 'in-review');
@@ -205,11 +205,30 @@ function computeDashboardData(data) {
   // Monthly chart from real data — 5 categories
   const months = t('month.short');
   const chartData = months.map(() => ({ total: 0, pending: 0, approved: 0, rejected: 0, cancelled: 0 }));
+  function parseChartDate(r) {
+    // Try ISO / SQLite datetime first
+    const candidates = [r.created_at, r.date, r.created_at || ''].filter(Boolean);
+    for (const raw of candidates) {
+      // ISO or SQLite datetime: 2026-07-15T10:06:07.631Z or 2026-07-15 10:06:07
+      const m = String(raw).match(/(\d{4})-(\d{2})-(\d{2})/);
+      if (m) return { year: +m[1], month: +m[2] - 1 };
+      // Thai date: "12 ต.ค. 2026" or "12ต.ค.2569"
+      const th = String(raw).match(/(\d{1,2})\s*([ก-๙\.]+)\.?\s*(\d{4})/);
+      if (th) {
+        const thMonthIdx = months.findIndex(m => th[2].startsWith(m.replace(/\./g, '')));
+        if (thMonthIdx >= 0) {
+          const yr = +th[3];
+          return { year: yr > 2400 ? yr - 543 : yr, month: thMonthIdx };
+        }
+      }
+    }
+    return null;
+  }
   requests.forEach(r => {
-    const d = r.created_at || '';
-    const dateObj = new Date(d);
-    if (isNaN(dateObj.getTime())) return;
-    const mIdx = dateObj.getMonth();
+    const parsed = parseChartDate(r);
+    if (!parsed) return;
+    const mIdx = parsed.month;
+    if (mIdx < 0 || mIdx > 11) return;
     chartData[mIdx].total++;
     if (r.status === 'submitted' || r.status === 'in-review') chartData[mIdx].pending++;
     else if (r.status === 'approved') chartData[mIdx].approved++;
