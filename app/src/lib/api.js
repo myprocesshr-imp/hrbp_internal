@@ -448,10 +448,11 @@ function handleMockRequest(path, method, body) {
       const completedReqs = approvedReqs + rejectedReqs;
       const successRate = completedReqs > 0 ? Math.round((approvedReqs / completedReqs) * 1000) / 10 : 0;
 
-      // Estimate avg processing days
+      // Estimate avg processing days — exclude cancelled-by-employee
       let totalDays = 0;
       let countWithTime = 0;
       userRequests.forEach(r => {
+        if (r.status === 'cancelled') return;
         if (r.status === 'approved') {
           totalDays += 2 + (Math.abs(r.request_code.charCodeAt(r.request_code.length - 1)) % 2) * 0.5;
           countWithTime++;

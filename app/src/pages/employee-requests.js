@@ -32,7 +32,7 @@ function getStatusBadge(status, label) {
     'cancelled':     'bg-surface-container-highest text-outline',
     'draft':         'bg-surface-container-highest text-on-surface-variant',
   };
-  return `<span class="px-3 py-1 rounded-full text-label-sm font-bold ${classes[status] || classes.draft}">${label}</span>`;
+  return `<span class="px-3 py-1 rounded-full text-label-sm font-bold whitespace-nowrap ${classes[status] || classes.draft}">${label}</span>`;
 }
 
 /** คำนวณวันทำการ (ข้ามเสาร์-อาทิตย์) */
@@ -783,13 +783,13 @@ export function initEmployeeRequests(container) {
         </div>
         <p class="text-headline-md font-bold text-on-surface">${req.id || req.request_code}</p>
         <p class="text-label-sm text-outline mt-1">${t('employeeReq.sentDate')} ${req.date || '-'}</p>
-        ${req.status !== 'rejected' ? `
+        ${req.status !== 'rejected' && !isEmployeeCancelled(req) ? `
         <div class="mt-3 flex items-center gap-2 text-label-sm text-primary font-bold">
           <span class="material-symbols-outlined text-[16px]">schedule</span>
           ${t('employeeReq.etaLabel')} <span class="font-bold">${etaDisplay}</span>
           ${isCustomEta ? `<span class="text-primary font-normal">${t('employeeReq.etaCustom')}</span>` : `<span class="text-outline font-normal">${t('employeeReq.etaDefault')}</span>`}
         </div>
-        ` : `
+        ` : req.status === 'rejected' ? `
         <div class="mt-3 bg-error-container/40 border border-error/20 rounded-xl p-4">
           <div class="flex items-start gap-3">
             <span class="material-symbols-outlined text-error shrink-0">cancel</span>
@@ -799,7 +799,7 @@ export function initEmployeeRequests(container) {
               ${req.rejected_by ? `<p class="text-label-sm text-outline mt-2">โดย: ${req.rejected_by}</p>` : ''}
             </div>
           </div>
-        </div>`}
+        </div>` : ''}
       </div>
 
       <!-- Attachments -->

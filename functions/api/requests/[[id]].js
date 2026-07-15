@@ -287,8 +287,8 @@ export async function onRequest(context) {
       const timeResults = await env.DB.prepare(`
         SELECT julianday(updated_at) - julianday(created_at) as days
         FROM requests
-        ${statsWhere}
-        AND (status = 'approved' OR status = 'rejected')
+        ${statsWhere ? statsWhere + ' AND' : 'WHERE'}
+        status IN ('approved', 'rejected')
         AND updated_at IS NOT NULL AND updated_at != ''
         AND created_at IS NOT NULL AND created_at != ''
         LIMIT 100

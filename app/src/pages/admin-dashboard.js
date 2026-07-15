@@ -461,7 +461,7 @@ export function renderAdminDashboard(data) {
                   <td class="px-6 py-4 text-label-sm text-on-surface-variant whitespace-nowrap">${req.department}</td>
                   <td class="px-6 py-4 text-label-md text-on-surface whitespace-nowrap">${req.type}</td>
                   <td class="px-6 py-4 whitespace-nowrap">
-                    <span class="px-2.5 py-1 rounded-md text-[10px] ${badgeClass}">${req.statusLabel}</span>
+                    <span class="px-2.5 py-1 rounded-md text-[10px] whitespace-nowrap ${badgeClass}">${req.statusLabel}</span>
                   </td>
                   <td class="px-6 py-4 text-label-sm text-on-surface-variant whitespace-nowrap">${req.date}</td>
                   <td class="px-6 py-4 text-label-sm text-on-surface-variant whitespace-nowrap">${formatThaiDate(req.eta_date)}</td>
@@ -968,7 +968,7 @@ export function initAdminDashboard(container) {
           </div></td>
           <td class="px-6 py-4 text-label-sm text-on-surface-variant whitespace-nowrap">${req.department}</td>
           <td class="px-6 py-4 text-label-md text-on-surface whitespace-nowrap">${req.type}</td>
-          <td class="px-6 py-4 whitespace-nowrap"><span class="px-2.5 py-1 rounded-md text-[10px] ${badgeClass}">${req.statusLabel}</span></td>
+          <td class="px-6 py-4 whitespace-nowrap"><span class="px-2.5 py-1 rounded-md text-[10px] whitespace-nowrap ${badgeClass}">${req.statusLabel}</span></td>
           <td class="px-6 py-4 text-label-sm text-on-surface-variant whitespace-nowrap">${req.date}</td>
           <td class="px-6 py-4 text-label-sm text-on-surface-variant whitespace-nowrap">${formatThaiDate(req.eta_date)}</td>
           <td class="px-6 py-4 whitespace-nowrap"><div class="flex flex-col gap-1">
