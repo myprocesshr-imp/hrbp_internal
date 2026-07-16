@@ -319,8 +319,6 @@ export function initLoginPage(container) {
         }
       } else {
         const demoEmpIds = {
-          'admin': 'EMP-2024-ADM',
-          'employee': 'EMP-2024-0892',
           'wipada.r': 'EMP-2024-001',
           'chaiyaphol.r': 'EMP-2024-015',
         };
@@ -367,15 +365,15 @@ export function initLoginPage(container) {
         if (!profile) {
           profile = {
             ID_Emp: empId,
-            EmpName: username === 'admin' ? 'Admin User' : 'อเล็กซ์ ริเวร่า',
+            EmpName: username,
             Department: 'Unknown Department',
             Position: 'Staff',
             EMail: `${username}@company.com`,
             Sim_Number: '0812345678',
             StartDate: '2024-01-01',
             SexID: '2',
-            FNameE: 'Alex',
-            LNameE: 'Rivera',
+            FNameE: username,
+            LNameE: '',
           };
         }
 

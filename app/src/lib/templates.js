@@ -500,43 +500,56 @@ export function buildCertDataFromRequest(rawReq, user) {
   let requestHrEmail = '';
   let signerPhone = snap?.hr_signer_phone || rawReq.hr_signer_phone || '';
 
+  let hrUsers = [];
+  try { hrUsers = JSON.parse(localStorage.getItem('hrbp_mock_users') || '[]'); } catch (_) {}
+
   if (!issuedOffPhone || !issuedOffEmail || !signerPhone) {
-    try {
-      const users = JSON.parse(localStorage.getItem('hrbp_mock_users') || '[]');
-      if (!issuedOffPhone || !issuedOffEmail) {
-        const lookupName = issuedOffName || requestHrName;
-        const lookupId = snap?.hr_officer_id || rawReq.hr_officer_id || requestHrId;
-        const foundHr = users.find(u =>
-          (lookupId && String(u.id) === String(lookupId))
-          || (lookupId && String(u.emp_id) === String(lookupId))
-          || (lookupName && u.full_name === lookupName)
-        );
-        if (foundHr) {
-          if (!issuedOffPhone) requestHrPhone = foundHr.phone || '';
-          if (!issuedOffEmail) requestHrEmail = foundHr.email || '';
-        }
+    if (!issuedOffPhone || !issuedOffEmail) {
+      const lookupName = issuedOffName || requestHrName;
+      const lookupId = snap?.hr_officer_id || rawReq.hr_officer_id || requestHrId;
+      const foundHr = hrUsers.find(u =>
+        (lookupId && String(u.id) === String(lookupId))
+        || (lookupId && String(u.emp_id) === String(lookupId))
+        || (lookupName && u.full_name === lookupName)
+      );
+      if (foundHr) {
+        if (!issuedOffPhone) requestHrPhone = foundHr.phone || '';
+        if (!issuedOffEmail) requestHrEmail = foundHr.email || '';
       }
-      if (!signerPhone && signerName) {
-        const foundSigner = users.find(u => u.full_name === signerName && ['hrmanager', 'admin'].includes(u.role));
-        if (foundSigner) signerPhone = foundSigner.phone || '';
-      }
-    } catch (_) {}
+    }
+    if (!signerPhone && signerName) {
+      const foundSigner = hrUsers.find(u => u.full_name === signerName && ['hrmanager', 'admin'].includes(u.role));
+      if (foundSigner) signerPhone = foundSigner.phone || '';
+    }
   }
+
+  // Resolve the actual employee record (not the session user) for on-behalf support
+  let empRecord = null;
+  try {
+    const empEmail = rawReq.user_email || '';
+    const empId    = rawReq.emp_id || rawReq.empCode || '';
+    empRecord = hrUsers.find(u =>
+      (empEmail && (u.email || '').toLowerCase() === empEmail.toLowerCase())
+      || (empId && String(u.emp_id) === String(empId))
+    ) || null;
+  } catch (_) {}
+
+  const empFull = empRecord || {};
 
   return {
     doc_type,
     hr_officer_name:  issuedOffName  || requestHrName || 'วิภาดา รักษาธรรม',
     hr_officer_phone: issuedOffPhone || requestHrPhone || '081-234-5678',
     hr_officer_email: issuedOffEmail || requestHrEmail || 'wipada.r@company.com',
-    full_name:    snap?.employee_name || user?.full_name || rawReq.full_name || '______________',
-    full_name_en: buildEnglishName(user) || user?.full_name || rawReq.full_name || '______________',
-    sex_id:       user?.sex_id        || '',
-    fname_e:      user?.fname_e       || '',
-    lname_e:      user?.lname_e       || '',
-    position:     user?.position     || '',
-    department:   user?.department   || '',
-    company_name: user?.company_name || '',
-    start_date:   user?.start_date   || '',
+    full_name:    snap?.employee_name || empFull.full_name || user?.full_name || rawReq.full_name || '______________',
+    full_name_en: buildEnglishName(empFull) || buildEnglishName(user) || empFull.full_name || user?.full_name || rawReq.full_name || '______________',
+    sex_id:       empFull.sex_id      || user?.sex_id      || rawReq.sex_id      || '',
+    fname_e:      empFull.fname_e     || user?.fname_e     || rawReq.fname_e     || '',
+    lname_e:      empFull.lname_e     || user?.lname_e     || rawReq.lname_e     || '',
+    position:     empFull.position    || user?.position    || rawReq.position    || '',
+    department:   empFull.department  || user?.department  || rawReq.department  || '',
+    company_name: empFull.company_name || user?.company_name || rawReq.company_name || '',
+    start_date:   empFull.start_date  || user?.start_date  || rawReq.start_date  || '',
     purpose:        rawReq.purpose       || '',
     purpose_value:  rawReq.purpose_value || '',
     salary:   rawReq.salary === 'ใช่' ? 'yes' : 'no',
@@ -547,7 +560,7 @@ export function buildCertDataFromRequest(rawReq, user) {
     hr_signer_name:    signerName || '',
     hr_signer_position: snap?.hr_signer_position || rawReq.hr_signer_position || 'HR Department Manager',
     hr_signer_phone:   signerPhone,
-    empCode: user?.emp_id || user?.empCode || rawReq.emp_id || rawReq.empCode || '______________',
+    empCode: empFull.emp_id || user?.emp_id || user?.empCode || rawReq.emp_id || rawReq.empCode || '______________',
     visa_country: rawReq.visa_country || rawReq.abroad_destination || '',
     abroad_destination: rawReq.abroad_destination || rawReq.visa_country || '',
     abroad_start_date: rawReq.abroad_start_date || '',

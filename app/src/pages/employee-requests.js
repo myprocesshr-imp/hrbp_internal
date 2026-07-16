@@ -133,7 +133,7 @@ function renderTableRows(visibleRequests) {
             <button class="p-2 hover:bg-surface-container rounded-lg transition-colors text-primary btn-view" data-id="${req.id || req.request_code}" title="${t('employeeReq.modalTitle')}">
               <span class="material-symbols-outlined">visibility</span>
             </button>
-            ${req.can_download || req.canDownload ? `
+            ${(req.can_download || req.canDownload) ? `
               <button class="p-2 hover:bg-surface-container rounded-lg transition-colors text-primary btn-download" data-id="${req.id || req.request_code}" title="${t('common.download')}">
                 <span class="material-symbols-outlined">download</span>
               </button>
@@ -290,7 +290,7 @@ export function renderEmployeeRequests(data) {
               <input
                 id="on-behalf-emp-id-input"
                 type="text"
-                placeholder="เช่น EMP-2024-0892"
+                placeholder="เช่น EMP-2024-001"
                 class="flex-1 bg-white border border-outline-variant rounded-lg px-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-on-surface font-medium"
               />
               <button id="on-behalf-search-btn" class="px-4 py-3 bg-primary text-on-primary rounded-lg font-bold hover:opacity-90 transition-opacity flex items-center gap-1">

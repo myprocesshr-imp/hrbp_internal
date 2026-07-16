@@ -6,8 +6,84 @@ import { getCurrentUser } from '../mock-data.js';
 import { navigate } from '../router.js';
 import { getUsers, getHrmsEmployee, uploadFile, getPickupLocations, createRequest, getTemplates } from '../lib/api.js';
 import { loadAvatarForElement } from '../lib/avatar-helper.js';
-import { previewCertificate, buildCertDataFromRequest } from '../lib/templates.js';
 import { t } from '../lib/i18n.js';
+
+const COUNTRIES = [
+  'Afghanistan','Albania','Algeria','Andorra','Angola','Antigua and Barbuda','Argentina','Armenia',
+  'Australia','Austria','Azerbaijan','Bahamas','Bahrain','Bangladesh','Barbados','Belarus','Belgium',
+  'Belize','Benin','Bhutan','Bolivia','Bosnia and Herzegovina','Botswana','Brazil','Brunei',
+  'Bulgaria','Burkina Faso','Burundi','Cambodia','Cameroon','Canada','Central African Republic',
+  'Chad','Chile','China','Colombia','Comoros','Congo (Brazzaville)','Congo (Kinshasa)','Costa Rica',
+  'Croatia','Cuba','Cyprus','Czech Republic','Denmark','Djibouti','Dominica','Dominican Republic',
+  'East Timor','Ecuador','Egypt','El Salvador','Equatorial Guinea','Eritrea','Estonia','Eswatini',
+  'Ethiopia','Fiji','Finland','France','Gabon','Gambia','Georgia','Germany','Ghana','Greece',
+  'Grenada','Guatemala','Guinea','Guinea-Bissau','Guyana','Haiti','Honduras','Hungary','Iceland',
+  'India','Indonesia','Iran','Iraq','Ireland','Israel','Italy','Ivory Coast','Jamaica','Japan',
+  'Jordan','Kazakhstan','Kenya','Kiribati','Kosovo','Kuwait','Kyrgyzstan','Laos','Latvia','Lebanon',
+  'Lesotho','Liberia','Libya','Liechtenstein','Lithuania','Luxembourg','Madagascar','Malawi','Malaysia',
+  'Maldives','Mali','Malta','Marshall Islands','Mauritania','Mauritius','Mexico','Micronesia',
+  'Moldova','Monaco','Mongolia','Montenegro','Morocco','Mozambique','Myanmar','Namibia','Nauru',
+  'Nepal','Netherlands','New Zealand','Nicaragua','Niger','Nigeria','North Korea','North Macedonia',
+  'Norway','Oman','Pakistan','Palau','Palestine','Panama','Papua New Guinea','Paraguay','Peru',
+  'Philippines','Poland','Portugal','Qatar','Romania','Russia','Rwanda','Saint Kitts and Nevis',
+  'Saint Lucia','Saint Vincent and the Grenadines','Samoa','San Marino','Sao Tome and Principe',
+  'Saudi Arabia','Senegal','Serbia','Seychelles','Sierra Leone','Singapore','Slovakia','Slovenia',
+  'Solomon Islands','Somalia','South Africa','South Korea','South Sudan','Spain','Sri Lanka','Sudan',
+  'Suriname','Sweden','Switzerland','Syria','Taiwan','Tajikistan','Tanzania','Thailand','Togo',
+  'Tonga','Trinidad and Tobago','Tunisia','Turkey','Turkmenistan','Tuvalu','Uganda','Ukraine',
+  'United Arab Emirates','United Kingdom','United States','Uruguay','Uzbekistan','Vanuatu',
+  'Vatican City','Venezuela','Vietnam','Yemen','Zambia','Zimbabwe'
+];
+
+function buildCountryDropdownHTML(id, placeholder) {
+  return `
+    <div class="country-dropdown relative" data-input-id="${id}">
+      <input type="hidden" id="${id}" class="country-hidden-input" />
+      <input type="text" class="country-search-input w-full bg-white border border-outline-variant rounded-lg px-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-on-surface font-medium" placeholder="${placeholder}" autocomplete="off" />
+      <div class="country-dropdown-list absolute z-50 mt-1 w-full max-h-60 overflow-y-auto bg-white border border-outline-variant rounded-lg shadow-lg hidden"></div>
+    </div>`;
+}
+
+function bindCountryDropdown(containerEl, id) {
+  const wrapper = containerEl.querySelector(`.country-dropdown[data-input-id="${id}"]`);
+  if (!wrapper) return;
+  const hidden = wrapper.querySelector('.country-hidden-input');
+  const search = wrapper.querySelector('.country-search-input');
+  const listEl = wrapper.querySelector('.country-dropdown-list');
+  let activeIdx = -1;
+
+  function renderList(query) {
+    const q = (query || '').toLowerCase();
+    const matches = q ? COUNTRIES.filter(c => c.toLowerCase().includes(q)) : COUNTRIES;
+    listEl.innerHTML = matches.length
+      ? matches.map(c => `<div class="country-option px-4 py-2.5 cursor-pointer hover:bg-primary/8 text-body-md text-on-surface transition-colors" data-value="${c}">${c}</div>`).join('')
+      : `<div class="px-4 py-3 text-body-md text-outline italic">No results</div>`;
+    activeIdx = -1;
+  }
+
+  search.addEventListener('focus', () => { renderList(search.value); listEl.classList.remove('hidden'); });
+  search.addEventListener('input', () => { renderList(search.value); listEl.classList.remove('hidden'); });
+
+  listEl.addEventListener('click', (e) => {
+    const opt = e.target.closest('.country-option');
+    if (!opt) return;
+    const val = opt.getAttribute('data-value');
+    hidden.value = val;
+    search.value = val;
+    listEl.classList.add('hidden');
+  });
+
+  search.addEventListener('keydown', (e) => {
+    const opts = listEl.querySelectorAll('.country-option');
+    if (!opts.length) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); activeIdx = Math.min(activeIdx + 1, opts.length - 1); opts.forEach((o, i) => o.classList.toggle('bg-primary/8', i === activeIdx)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); activeIdx = Math.max(activeIdx - 1, 0); opts.forEach((o, i) => o.classList.toggle('bg-primary/8', i === activeIdx)); }
+    else if (e.key === 'Enter') { e.preventDefault(); if (activeIdx >= 0 && opts[activeIdx]) { opts[activeIdx].click(); } }
+    else if (e.key === 'Escape') { listEl.classList.add('hidden'); }
+  });
+
+  search.addEventListener('blur', () => { setTimeout(() => listEl.classList.add('hidden'), 150); });
+}
 
 /**
  * Format ISO date string (e.g. "2024-01-15") to Thai readable ("15 มกราคม 2567")
@@ -230,7 +306,7 @@ export function renderNewRequest() {
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label class="block text-label-md font-semibold text-on-surface-variant mb-2">${t('newReq.labelVisaCountry')}</label>
-                  <input id="visa-country" type="text" placeholder="${t('newReq.visaPlaceholder')}" class="w-full bg-white border border-outline-variant rounded-lg px-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-on-surface font-medium" />
+                  ${buildCountryDropdownHTML('visa-country', t('newReq.visaPlaceholder'))}
                 </div>
                 <div>
                   <label class="block text-label-md font-semibold text-on-surface-variant mb-2">${t('newReq.labelTravelDate')}</label>
@@ -248,7 +324,7 @@ export function renderNewRequest() {
               <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div class="md:col-span-1">
                   <label class="block text-label-md font-semibold text-on-surface-variant mb-2">${t('newReq.labelAbroadDestination')} <span class="text-error">*</span></label>
-                  <input id="abroad-destination" type="text" placeholder="${t('newReq.abroadDestinationPlaceholder')}" class="w-full bg-white border border-outline-variant rounded-lg px-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-on-surface font-medium" />
+                  ${buildCountryDropdownHTML('abroad-destination', t('newReq.abroadDestinationPlaceholder'))}
                 </div>
                 <div>
                   <label class="block text-label-md font-semibold text-on-surface-variant mb-2">${t('newReq.labelAbroadStartDate')} <span class="text-error">*</span></label>
@@ -382,10 +458,6 @@ export function renderNewRequest() {
           <button id="btn-preview-request" class="flex-[2] bg-primary text-on-primary py-4 rounded-xl font-bold text-headline-md hover:opacity-90 active:scale-[0.98] transition-all shadow-lg shadow-primary/20 h-16 flex items-center justify-center gap-2">
             <span class="material-symbols-outlined">preview</span>
             ${t('newReq.previewBtn')}
-          </button>
-          <button id="btn-preview-cert" class="flex-[1.5] border-2 border-primary text-primary py-4 rounded-xl font-bold text-headline-md hover:bg-primary/5 active:scale-[0.98] transition-all h-16 flex items-center justify-center gap-2">
-            <span class="material-symbols-outlined">picture_as_pdf</span>
-            ${t('newReq.previewCertBtn')}
           </button>
           <button id="btn-cancel-request" class="flex-1 bg-error-container text-on-error-container py-4 rounded-xl font-bold text-headline-md hover:bg-error/20 active:scale-[0.98] transition-all h-16">
             ${t('newReq.cancelBtn')}
@@ -663,6 +735,8 @@ export async function initNewRequest(container) {
     }
   }
   purposeRadios.forEach(r => r.addEventListener('change', updateConditionalFields));
+  bindCountryDropdown(container, 'visa-country');
+  bindCountryDropdown(container, 'abroad-destination');
   // Show institution by default (bank is checked)
   conditionalInstitution?.classList.remove('hidden');
 
@@ -948,38 +1022,6 @@ export async function initNewRequest(container) {
   }
   const langLabels    = { th: t('newReq.langThai'), en: t('newReq.langEng'), both: t('newReq.langBoth') };
   const deliveryLabels= { digital: t('newReq.deliveryDigital'), physical: t('newReq.deliveryPhysical') };
-
-  // ── Preview Certificate PDF ──────────────────────────────────
-  container.querySelector('#btn-preview-cert')?.addEventListener('click', async () => {
-    const curUser = getCurrentUser();
-    const empTarget = (isOnBehalf && targetEmployee) ? targetEmployee : curUser;
-    const docType  = getSelectedDocType();
-    const purpose  = container.querySelector('.purpose-radio:checked')?.value;
-    const selectedTplEl = container.querySelector('.doc-type-radio:checked');
-    const isEng = (selectedTplEl?.dataset?.templateName || '').toLowerCase().includes('eng') || (selectedTplEl?.dataset?.templateName || '').toLowerCase().includes('en') || (selectedTplEl?.dataset?.templateId || '').toLowerCase().includes('en');
-    const lang = isEng ? 'en' : 'th';
-    const salary   = container.querySelector('#salary-yes')?.checked ? 'yes' : 'no';
-    const extra = collectExtraFields(docType, purpose);
-    const data = {
-      doc_type: docType || 'work',
-      empCode: empTarget?.emp_id || empTarget?.empCode || '________',
-      full_name: empTarget?.full_name || empTarget?.name || '______________',
-      position: empTarget?.position || '',
-      department: empTarget?.department || '',
-      company_name: empTarget?.company_name || empTarget?.companyName || '',
-      start_date: empTarget?.start_date || empTarget?.startDate || '',
-      purpose: purposeLabels[purpose] || '',
-      purpose_value: purpose || '',
-      salary,
-      language: lang,
-      cert_number: '________',
-      visa_country: extra.visa_country,
-      abroad_destination: extra.abroad_destination,
-      abroad_start_date: extra.abroad_start_date,
-      abroad_end_date: extra.abroad_end_date,
-    };
-    await previewCertificate(data, false);
-  });
 
   container.querySelector('#btn-preview-request')?.addEventListener('click', () => {
     const curUser = getCurrentUser();

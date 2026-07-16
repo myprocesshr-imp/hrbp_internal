@@ -195,6 +195,7 @@ function buildWorkCertEN() {
     <div class="signer" style="text-align:left;min-width:300px;">
       <div class="sig-greeting">Sincerely yours,</div>
       <div style="height:50px;"></div>
+      <div id="cb-sig-box" style="width:200px;height:68px;margin:0;padding:0;display:flex;align-items:flex-end;justify-content:flex-start;overflow:hidden;">{{hr_signer_signature}}</div>
       <div style="position:relative;display:inline-block;width:100%;margin-top:0;">
         <div id="cb-mgr-display" title="Click to select signer"
           style="font-size:16pt;font-weight:bold;color:#1a73e8;border-bottom:1.5px dashed #1a73e8;cursor:pointer;">
@@ -252,6 +253,7 @@ function buildVisaAbroadEN() {
     <div class="signer" style="text-align:left;min-width:300px;">
       <div class="sig-greeting">Sincerely yours,</div>
       <div style="height:28px;"></div>
+      <div id="cb-sig-box" style="width:200px;height:68px;margin:0;padding:0;display:flex;align-items:flex-end;justify-content:flex-start;overflow:hidden;">{{hr_signer_signature}}</div>
       <div style="position:relative;display:inline-block;width:100%;margin-top:0;">
         <div id="cb-mgr-display" title="Click to select signer"
           style="font-size:16pt;font-weight:bold;color:#1a73e8;border-bottom:1.5px dashed #1a73e8;cursor:pointer;">
@@ -274,8 +276,8 @@ function buildVisaAbroadEN() {
 async function patchWorkCertTemplates(existing) {
   const patches = [
     { id: 'tpl-work-th', content: buildWorkCertTH(), version: 'V 1.8' },
-    { id: 'tpl-work-en', content: buildWorkCertEN(), version: 'V 2.0' },
-    { id: 'tpl-visa-abroad', content: buildVisaAbroadEN(), version: 'V 2.0' },
+    { id: 'tpl-work-en', content: buildWorkCertEN(), version: 'V 2.1' },
+    { id: 'tpl-visa-abroad', content: buildVisaAbroadEN(), version: 'V 2.1' },
   ];
   for (const patch of patches) {
     const tmpl = existing.find(t => t.id === patch.id);

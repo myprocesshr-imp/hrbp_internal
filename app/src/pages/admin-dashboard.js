@@ -57,7 +57,8 @@ function formatThaiDate(dateStr) {
 
 function getDashboardFilterStatus() {
   const v = sessionStorage.getItem('dashboard-pending-filter');
-  return v === null ? 'submitted' : v;
+  if (v === null) return 'submitted';
+  return v;
 }
 
 function filterDashboardPending(pending, filterStatus) {
@@ -580,7 +581,6 @@ export function renderAdminDashboard(data) {
         <div class="flex flex-col mt-4">
           <!-- Legend -->
           <div class="flex flex-wrap gap-3 mb-4 px-2">
-            <span class="flex items-center gap-1.5 text-[11px] text-on-surface-variant"><span class="w-3 h-3 rounded-sm bg-primary"></span>${t('dashboard.chartAll') || 'ทั้งหมด'}</span>
             <span class="flex items-center gap-1.5 text-[11px] text-on-surface-variant"><span class="w-3 h-3 rounded-sm" style="background:#F59E0B"></span>${t('dashboard.chartPending') || 'รอตรวจสอบ'}</span>
             <span class="flex items-center gap-1.5 text-[11px] text-on-surface-variant"><span class="w-3 h-3 rounded-sm" style="background:#22C55E"></span>${t('dashboard.chartApproved') || 'อนุมัติแล้ว'}</span>
             <span class="flex items-center gap-1.5 text-[11px] text-on-surface-variant"><span class="w-3 h-3 rounded-sm" style="background:#EF4444"></span>${t('dashboard.chartRejected') || 'ปฏิเสธ'}</span>
@@ -588,7 +588,7 @@ export function renderAdminDashboard(data) {
           </div>
 
           <!-- Bars -->
-          <div id="chart-bars" class="flex items-end justify-between gap-2 relative" style="height:200px;padding-top:24px;">
+          <div id="chart-bars" class="flex items-stretch justify-between gap-2 relative" style="height:200px;padding-top:24px;">
             <div class="absolute inset-x-0 top-6 bottom-0 flex flex-col justify-between pointer-events-none opacity-20">
               <div class="w-full h-px bg-outline-variant"></div>
               <div class="w-full h-px bg-outline-variant"></div>
@@ -597,24 +597,31 @@ export function renderAdminDashboard(data) {
             </div>
 
             ${chartMonths.map((month, i) => {
-              const maxVal = Math.max(...chartTotal, 1);
-              const barH = Math.max((chartTotal[i] / maxVal) * 100, chartTotal[i] > 0 ? 8 : 0);
-              const segs = [];
-              if (chartTotal[i] > 0) {
-                const total = chartTotal[i];
-                if (chartCancelled[i]) segs.push(`<div style="height:${(chartCancelled[i]/total)*100}%;background:#9E9E9E;" class="w-full"></div>`);
-                if (chartRejected[i]) segs.push(`<div style="height:${(chartRejected[i]/total)*100}%;background:#EF4444;" class="w-full"></div>`);
-                if (chartApproved[i]) segs.push(`<div style="height:${(chartApproved[i]/total)*100}%;background:#22C55E;" class="w-full"></div>`);
-                if (chartPending[i]) segs.push(`<div style="height:${(chartPending[i]/total)*100}%;background:#F59E0B;" class="w-full"></div>`);
-              }
-              const tip = `${month}\n${t('dashboard.chartAll')}: ${chartTotal[i]}\n${t('dashboard.chartPending')}: ${chartPending[i]}\n${t('dashboard.chartApproved')}: ${chartApproved[i]}\n${t('dashboard.chartRejected')}: ${chartRejected[i]}\n${t('dashboard.chartCancelled')}: ${chartCancelled[i]}`;
+              const maxVal = Math.max(...chartPending, ...chartApproved, ...chartRejected, ...chartCancelled, 1);
+              const tip = `${month}\n${t('dashboard.chartPending')}: ${chartPending[i]}\n${t('dashboard.chartApproved')}: ${chartApproved[i]}\n${t('dashboard.chartRejected')}: ${chartRejected[i]}\n${t('dashboard.chartCancelled')}: ${chartCancelled[i]}`;
+              const barH = (val) => Math.max((val / maxVal) * 100, val > 0 ? 4 : 0);
               return `
-                <div class="flex flex-col items-center flex-1 z-10 cursor-pointer" title="${tip}">
+                <div class="flex flex-col items-center flex-1 z-10 cursor-pointer min-w-0" title="${tip}">
                   <span class="text-[11px] font-bold text-primary mb-1 leading-none">${chartTotal[i]}</span>
-                  <div class="w-full max-w-[40px] flex flex-col justify-end rounded-t-sm" style="height:${barH}%;">
-                    ${segs.join('') || '<div style="height:2%;background:var(--md-sys-color-outline-variant);" class="w-full"></div>'}
+                  <div class="w-full flex-1 flex items-stretch justify-center gap-[3px]">
+                    <div class="flex flex-col items-center justify-end flex-1 min-w-0">
+                      <span class="text-[9px] font-bold leading-none text-amber-600 mb-[2px]">${chartPending[i] || ''}</span>
+                      <div class="cb-bar w-full max-w-[14px] rounded-t-sm" style="height:${barH(chartPending[i])}%;background:#F59E0B;"></div>
+                    </div>
+                    <div class="flex flex-col items-center justify-end flex-1 min-w-0">
+                      <span class="text-[9px] font-bold leading-none text-green-600 mb-[2px]">${chartApproved[i] || ''}</span>
+                      <div class="cb-bar w-full max-w-[14px] rounded-t-sm" style="height:${barH(chartApproved[i])}%;background:#22C55E;"></div>
+                    </div>
+                    <div class="flex flex-col items-center justify-end flex-1 min-w-0">
+                      <span class="text-[9px] font-bold leading-none text-red-600 mb-[2px]">${chartRejected[i] || ''}</span>
+                      <div class="cb-bar w-full max-w-[14px] rounded-t-sm" style="height:${barH(chartRejected[i])}%;background:#EF4444;"></div>
+                    </div>
+                    <div class="flex flex-col items-center justify-end flex-1 min-w-0">
+                      <span class="text-[9px] font-bold leading-none text-gray-500 mb-[2px]">${chartCancelled[i] || ''}</span>
+                      <div class="cb-bar w-full max-w-[14px] rounded-t-sm" style="height:${barH(chartCancelled[i])}%;background:#9E9E9E;"></div>
+                    </div>
                   </div>
-                  <span class="text-label-sm text-outline mt-2">${month}</span>
+                  <span class="text-label-sm text-outline mt-2 whitespace-nowrap">${month}</span>
                 </div>
               `;
             }).join('')}
@@ -893,15 +900,13 @@ export function initAdminDashboard(container) {
 
   // ── Chart animations ──────────────────────────────────────────
   setTimeout(() => {
-    const bars = container.querySelectorAll('#chart-bars > div');
+    const bars = container.querySelectorAll('#chart-bars .cb-bar');
     bars.forEach(bar => {
-      const inner = bar.querySelector('[style*="height"]');
-      if (!inner) return;
-      const targetHeight = inner.style.height;
-      inner.style.height = '0%';
+      const targetHeight = bar.style.height;
+      bar.style.height = '0%';
       setTimeout(() => {
-        inner.style.transition = 'height 1s cubic-bezier(0.34, 1.56, 0.64, 1)';
-        inner.style.height = targetHeight;
+        bar.style.transition = 'height 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)';
+        bar.style.height = targetHeight;
       }, 50);
     });
   }, 100);
@@ -909,7 +914,10 @@ export function initAdminDashboard(container) {
   // ── Dashboard refresh helper (replaces setTimeout+hashchange pattern) ──
   // Re-renders only the dynamic content (KPIs, table, pagination, chart, SLA)
   // without a full page reload, then re-binds event handlers for new elements.
+  let _refreshing = false;
   const refreshDashboard = async () => {
+    if (_refreshing) return;
+    _refreshing = true;
     // Show loading indicator (create if not exists)
     let loadingOverlay = container.querySelector('#admin-loading');
     if (!loadingOverlay) {
@@ -1032,24 +1040,31 @@ export function initAdminDashboard(container) {
         chartBarsContainer.innerHTML = '';
         if (gridLines) chartBarsContainer.appendChild(gridLines);
         const barHtml = chartMonths.map((month, i) => {
-          const maxVal = Math.max(...chartTotal, 1);
-          const barH = Math.max((chartTotal[i] / maxVal) * 100, chartTotal[i] > 0 ? 8 : 0);
-          const segs = [];
-          if (chartTotal[i] > 0) {
-            const total = chartTotal[i];
-            if (chartCancelled[i]) segs.push(`<div style="height:${(chartCancelled[i]/total)*100}%;background:#9E9E9E;" class="w-full"></div>`);
-            if (chartRejected[i]) segs.push(`<div style="height:${(chartRejected[i]/total)*100}%;background:#EF4444;" class="w-full"></div>`);
-            if (chartApproved[i]) segs.push(`<div style="height:${(chartApproved[i]/total)*100}%;background:#22C55E;" class="w-full"></div>`);
-            if (chartPending[i]) segs.push(`<div style="height:${(chartPending[i]/total)*100}%;background:#F59E0B;" class="w-full"></div>`);
-          }
-          const tip = `${month}\n${t('dashboard.chartAll')}: ${chartTotal[i]}\n${t('dashboard.chartPending')}: ${chartPending[i]}\n${t('dashboard.chartApproved')}: ${chartApproved[i]}\n${t('dashboard.chartRejected')}: ${chartRejected[i]}\n${t('dashboard.chartCancelled')}: ${chartCancelled[i]}`;
+          const maxVal = Math.max(...chartPending, ...chartApproved, ...chartRejected, ...chartCancelled, 1);
+          const tip = `${month}\n${t('dashboard.chartPending')}: ${chartPending[i]}\n${t('dashboard.chartApproved')}: ${chartApproved[i]}\n${t('dashboard.chartRejected')}: ${chartRejected[i]}\n${t('dashboard.chartCancelled')}: ${chartCancelled[i]}`;
+          const barH = (val) => Math.max((val / maxVal) * 100, val > 0 ? 4 : 0);
           return `
-            <div class="flex flex-col items-center flex-1 z-10 cursor-pointer" title="${tip}">
+            <div class="flex flex-col items-center flex-1 z-10 cursor-pointer min-w-0" title="${tip}">
               <span class="text-[11px] font-bold text-primary mb-1 leading-none">${chartTotal[i]}</span>
-              <div class="w-full max-w-[40px] flex flex-col justify-end rounded-t-sm" style="height:${barH}%;">
-                ${segs.join('') || '<div style="height:2%;background:var(--md-sys-color-outline-variant);" class="w-full"></div>'}
+              <div class="w-full flex-1 flex items-stretch justify-center gap-[3px]">
+                <div class="flex flex-col items-center justify-end flex-1 min-w-0">
+                  <span class="text-[9px] font-bold leading-none text-amber-600 mb-[2px]">${chartPending[i] || ''}</span>
+                  <div class="cb-bar w-full max-w-[14px] rounded-t-sm" style="height:${barH(chartPending[i])}%;background:#F59E0B;"></div>
+                </div>
+                <div class="flex flex-col items-center justify-end flex-1 min-w-0">
+                  <span class="text-[9px] font-bold leading-none text-green-600 mb-[2px]">${chartApproved[i] || ''}</span>
+                  <div class="cb-bar w-full max-w-[14px] rounded-t-sm" style="height:${barH(chartApproved[i])}%;background:#22C55E;"></div>
+                </div>
+                <div class="flex flex-col items-center justify-end flex-1 min-w-0">
+                  <span class="text-[9px] font-bold leading-none text-red-600 mb-[2px]">${chartRejected[i] || ''}</span>
+                  <div class="cb-bar w-full max-w-[14px] rounded-t-sm" style="height:${barH(chartRejected[i])}%;background:#EF4444;"></div>
+                </div>
+                <div class="flex flex-col items-center justify-end flex-1 min-w-0">
+                  <span class="text-[9px] font-bold leading-none text-gray-500 mb-[2px]">${chartCancelled[i] || ''}</span>
+                  <div class="cb-bar w-full max-w-[14px] rounded-t-sm" style="height:${barH(chartCancelled[i])}%;background:#9E9E9E;"></div>
+                </div>
               </div>
-              <span class="text-label-sm text-outline mt-2">${month}</span>
+              <span class="text-label-sm text-outline mt-2 whitespace-nowrap">${month}</span>
             </div>
           `;
         }).join('');
@@ -1192,7 +1207,7 @@ export function initAdminDashboard(container) {
       container.querySelectorAll('.kpi-card').forEach(card => {
         card.addEventListener('click', () => {
           const val = card.getAttribute('data-filter-value');
-          const current = sessionStorage.getItem('dashboard-pending-filter') || '';
+          const current = getDashboardFilterStatus();
           sessionStorage.setItem('dashboard-pending-page', '1');
           sessionStorage.setItem('dashboard-pending-filter', val === current ? '' : val);
           refreshDashboard();
@@ -1209,6 +1224,7 @@ export function initAdminDashboard(container) {
     } catch (err) {
       console.warn('[Dashboard] Refresh failed:', err);
     } finally {
+      _refreshing = false;
       // Hide loading indicator
       if (loadingOverlay) loadingOverlay.classList.add('hidden');
     }
@@ -1568,23 +1584,23 @@ export function initAdminDashboard(container) {
     });
   });
 
+  // ── KPI Filter Cards (initial render) ──────────────────────────
+  container.querySelectorAll('.kpi-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const val = card.getAttribute('data-filter-value');
+      const current = getDashboardFilterStatus();
+      sessionStorage.setItem('dashboard-pending-page', '1');
+      sessionStorage.setItem('dashboard-pending-filter', val === current ? '' : val);
+      refreshDashboard();
+    });
+  });
+
   // ── Pagination ─────────────────────────────────────────────────
   container.querySelectorAll('.btn-page').forEach(btn => {
     btn.addEventListener('click', () => {
       const page = parseInt(btn.getAttribute('data-page'));
       if (page < 1) return;
       sessionStorage.setItem('dashboard-pending-page', String(page));
-      refreshDashboard();
-    });
-  });
-
-  // ── KPI Click Filter ──────────────────────────────────────────
-  container.querySelectorAll('.kpi-card').forEach(card => {
-    card.addEventListener('click', () => {
-      const val = card.getAttribute('data-filter-value');
-      const current = sessionStorage.getItem('dashboard-pending-filter') || '';
-      sessionStorage.setItem('dashboard-pending-page', '1');
-      sessionStorage.setItem('dashboard-pending-filter', val === current ? '' : val);
       refreshDashboard();
     });
   });

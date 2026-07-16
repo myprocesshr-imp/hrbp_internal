@@ -10,7 +10,7 @@
  */
 import { navigate } from '../router.js';
 import { getCurrentUser } from '../mock-data.js';
-import { updateUser, getTemplates, getEmployeeRequests, getUsers, getCertMasterData, uploadFile, updateRequest } from '../lib/api.js';
+import { updateUser, getTemplates, getEmployeeRequests, getUsers, getCertMasterData, uploadFile, updateRequest, initMockDB } from '../lib/api.js';
 import {
   buildEmployeeDisplayFields,
   buildEnglishName,
@@ -166,7 +166,7 @@ const COMPANY_MAP = {
 const CATEGORY_CONFIG = {
   'หนังสือรับรองการทำงาน': { showSalary: false, titleTH: 'หนังสือรับรองการทำงาน', titleEN: 'Certificate of Employment' },
   'หนังสือรับรองเงินเดือน': { showSalary: true, titleTH: 'หนังสือรับรองเงินเดือน', titleEN: 'Salary Certificate' },
-  'หนังสือรับรองเพื่อทำวีซ่า': { showSalary: false, titleTH: 'หนังสือรับรองเพื่อการขอวีซ่า', titleEN: 'Visa Support Letter' },
+  'หนังสือรับรองเพื่อทำวีซ่า': { showSalary: true, titleTH: 'หนังสือรับรองเพื่อการขอวีซ่า', titleEN: 'Visa Support Letter' },
 };
 
 const DOC_CAT_MAP = {
@@ -290,8 +290,9 @@ function populateCertificateControlSelects(container, { managers, staff, remarks
   const mgrSel = $('cb-mgr-select');
   if (mgrSel) {
     const prev = mgrSel.value || curMgrId || '';
-    mgrSel.innerHTML = '<option value="">— เลือกผู้มีอำนาจลงนาม —</option>'
-      + managers.map(m => `<option value="${m.id}">${m.full_name} — ${m.position}</option>`).join('');
+    const useEn = !isThai;
+    mgrSel.innerHTML = `<option value="">— ${useEn ? 'Select Signer' : 'เลือกผู้มีอำนาจลงนาม'} —</option>`
+      + managers.map(m => `<option value="${m.id}">${useEn ? (m.full_name_en || m.full_name) : m.full_name} — ${m.position}</option>`).join('');
     mgrSel.value = prev || managers[0]?.id || '';
   }
   const hrbpStaff = getHrbpStaff(staff);
@@ -518,6 +519,7 @@ function resolveDocIdForRequest(req, isEnglish = false) {
 }
 function loadHRStaff() {
   try {
+    initMockDB();
     const users = JSON.parse(localStorage.getItem(MOCK_USERS_KEY) || '[]');
     const hrUsers = users.filter(u => ['admin', 'hrmanager', 'hrbp'].includes(u.role));
     if (hrUsers.length > 0) {
@@ -526,6 +528,7 @@ function loadHRStaff() {
         emp_id: u.emp_id || '',
         username: u.username || '',
         full_name: u.full_name || '',
+        full_name_en: [u.fname_e, u.lname_e].filter(Boolean).join(' ') || u.full_name || '',
         role: u.role,
         position: u.position || (u.role === 'admin' ? 'HR Manager' : 'HR Officer'),
         email: u.email || '',
@@ -595,6 +598,7 @@ function mockEmployee() {
 
   const defaultEmp = {
     nameTH: 'อเล็กซ์ ริเวร่า', nameEN: 'Alex Rivera',
+    sexId: '2',
     posTH:  'นักออกแบบผลิตภัณฑ์อาวุโส', posEN: 'Senior Product Designer',
     deptTH: 'การออกแบบประสบการณ์ผู้ใช้', deptEN: 'User Experience Design',
     company: 'อินเตอร์ไทยคอนสตรัคชั่น จำกัด',
@@ -613,7 +617,12 @@ function mockEmployee() {
 
       if (req) {
         const users = JSON.parse(localStorage.getItem('hrbp_mock_users') || '[]');
-        const user = users.find(u => u.email === req.user_email) || {};
+        const reqEmail = (req.user_email || '').toLowerCase();
+        const reqEmpId = req.emp_id || req.empCode || '';
+        const user = users.find(u =>
+          (reqEmail && (u.email || '').toLowerCase() === reqEmail)
+          || (reqEmpId && String(u.emp_id) === String(reqEmpId))
+        ) || {};
         
         const formatThaiDateFull = (dateStr) => {
           if (!dateStr) return '';
@@ -651,7 +660,7 @@ function mockEmployee() {
           company: comp,
           startTH: formatThaiDateFull(startDate) || defaultEmp.startTH,
           startEN: formatEnglishDateFull(startDate) || defaultEmp.startEN,
-          salary:  user.salary || req.salary || defaultEmp.salary,
+          salary:  req.hr_salary_amount || req.salary_amount || defaultEmp.salary,
           empCode: user.emp_id || req.emp_id || user.empCode || defaultEmp.empCode || '______________',
         };
       }
@@ -1020,6 +1029,14 @@ export async function initCertificateBuilder(container) {
         if (req) {
         loadedReq = req;
         loadedReqCache = req;
+        // Sync API-loaded request into localStorage so handleSave can find it
+        try {
+          const stored = JSON.parse(localStorage.getItem('hrbp_employee_requests') || '[]');
+          if (!stored.some(r => r.id === req.id)) {
+            stored.push(req);
+            localStorage.setItem('hrbp_employee_requests', JSON.stringify(stored));
+          }
+        } catch (_) {}
         const storedTemplates = loadPublishedTemplates();
         if (req.template_id && storedTemplates.some(t => t.id === req.template_id)) {
           curTemplate = req.template_id;
@@ -1341,14 +1358,14 @@ export async function initCertificateBuilder(container) {
       if (storedTmpl && storedTmpl.content && bodyEl) {
         const emp = mockEmployee();
         const rmkText = $('cb-rmk-text')?.textContent || '';
-        const mgrName = $('cb-mgr-name')?.textContent || '';
+        const curMgr = managers.find(x => String(x.id) === String(curMgrId));
+        const mgrName = tmplIsEn ? (curMgr?.full_name_en || curMgr?.full_name || '') : (curMgr?.full_name || $('cb-mgr-name')?.textContent || '');
         const mgrPos = $('cb-mgr-pos')?.textContent || '';
         const issueDate = $('cb-issue-date')?.textContent || todayThaiLong();
         const officer = resolveOfficerContact(container, staff, curOffId);
         const offName = officer.name;
         const offPhone = officer.phone;
         const offEmail = officer.email;
-        const curMgr = managers.find(x => String(x.id) === String(curMgrId));
         const mgrPhone = curMgr?.phone || '';
         const sigSrc = sigs[curMgrId] || $('cb-sig-img')?.src || '';
         const salaryVal = $('cb-emp-salary')?.value || emp.salary;
@@ -1405,6 +1422,18 @@ export async function initCertificateBuilder(container) {
         bodyEl.dataset.origHtml = savedBody;
         bodyEl.innerHTML = bodyContent;
         setStoredTemplateMode(true);
+        /* Make salary_amount editable inside the template body */
+        bodyEl.querySelectorAll('.field').forEach(span => {
+          if (span.textContent === salaryVal && span.closest('.body-text, .body')) {
+            const inp = document.createElement('input');
+            inp.type = 'text';
+            inp.id = 'cb-emp-salary';
+            inp.value = salaryVal;
+            inp.title = 'Click to edit salary';
+            inp.style.cssText = 'font:inherit;font-weight:bold;border:none;border-bottom:1.5px dashed #1a73e8;background:#e8f0fe;padding:0 4px;min-width:80px;text-align:center;outline:none;color:#1a1a1a;vertical-align:baseline;';
+            span.replaceWith(inp);
+          }
+        });
         populateCertificateControlSelects(container, { managers, staff, remarks, isThai, curMgrId, curOffId });
         wireHrbpFooterSelects(container, sel => updateOfficer(sel.value, sel));
         syncWorkCertThControlsFromSelects();
@@ -1454,7 +1483,7 @@ export async function initCertificateBuilder(container) {
     container.querySelectorAll('#cb-off-select, #cb-outer-off-select, #cb-header-hr-select').forEach(sel => {
       if (sel && String(sel.value) !== String(id)) sel.value = id;
     });
-    if (shouldReapplyStoredTemplate()) applyTmpl(curTemplate);
+    if (shouldReapplyStoredTemplate()) { try { applyTmpl(curTemplate); } catch (err) { console.error('[Certificate Builder] applyTmpl in updateOfficer failed:', err); } }
   };
 
   // ── Editable controls (document delegation — toolbar may live on body)
@@ -1479,7 +1508,7 @@ export async function initCertificateBuilder(container) {
       } else {
         el.textContent = '— เลือกหมายเหตุ —';
       }
-      if (shouldReapplyStoredTemplate()) applyTmpl(curTemplate);
+      if (shouldReapplyStoredTemplate()) { try { applyTmpl(curTemplate); } catch (err) { console.error('[Certificate Builder] applyTmpl in onCbChange failed:', err); } }
     } else if (t.id === 'cb-mgr-select') {
       updateMgr(t.value);
     } else if (t.id === 'cb-header-hr-select') {
@@ -1491,7 +1520,7 @@ export async function initCertificateBuilder(container) {
   const onCbBlur = (e) => {
     if (!isCbUiTarget(e.target)) return;
     if (e.target.id === 'cb-issue-date' && shouldReapplyStoredTemplate()) {
-      applyTmpl(curTemplate);
+      try { applyTmpl(curTemplate); } catch (err) { console.error('[Certificate Builder] applyTmpl on blur failed:', err); }
     }
   };
   document.addEventListener('blur', onCbBlur, true);
@@ -1571,7 +1600,8 @@ export async function initCertificateBuilder(container) {
     curMgrId = id;
     const m = managers.find(x => String(x.id) === String(id)); if (!m) return;
     const nameEl = $('cb-mgr-name'), posEl = $('cb-mgr-pos'), phoneEl = $('cb-mgr-phone');
-    if (nameEl) nameEl.textContent = m.full_name;
+    const useEn = !isThai();
+    if (nameEl) nameEl.textContent = useEn ? (m.full_name_en || m.full_name) : m.full_name;
     if (posEl)  posEl.textContent  = m.position;
     if (phoneEl) phoneEl.textContent = formatPhoneInternational(m.phone || '') || '-';
     sigs = loadSignatures();
@@ -1580,10 +1610,10 @@ export async function initCertificateBuilder(container) {
       ? `<img src="${sigs[id]}" id="cb-sig-img" class="max-h-full max-w-full object-contain" alt="Signature of ${m.full_name}" />`
 : `<div class="text-center"><span class="material-symbols-outlined text-slate-200 text-[28px]">draw</span></div>`;
     buildSigPanel();
-    if (shouldReapplyStoredTemplate()) applyTmpl(curTemplate);
+    if (shouldReapplyStoredTemplate()) { try { applyTmpl(curTemplate); } catch (err) { console.error('[Certificate Builder] applyTmpl in updateMgr failed:', err); } }
   };
   populateCertificateControlSelects(container, { managers, staff, remarks, isThai, curMgrId, curOffId });
-  if (managers[0]) { const s = $('cb-mgr-select'); if (s) { s.value = managers[0].id; updateMgr(managers[0].id); } }
+  if (managers[0]) { const s = $('cb-mgr-select'); if (s) { s.value = managers[0].id; try { updateMgr(managers[0].id); } catch (err) { console.error('[Certificate Builder] updateMgr init failed:', err); } } }
 
   const syncWorkCertThControlsFromSelects = () => {
     const body = container.querySelector('#cb-body');
@@ -1633,7 +1663,8 @@ export async function initCertificateBuilder(container) {
     const rId = getReqId();
     if (!rId) { toast('ไม่พบคำขอ (reqId)', 'error'); return; }
     const saveRmk  = $('cb-rmk-text')?.textContent || '';
-    const saveMgr  = $('cb-mgr-name')?.textContent || '';
+    const saveMgrRec = managers.find(x => String(x.id) === String(curMgrId));
+    const saveMgr  = isThai() ? ($('cb-mgr-name')?.textContent || '') : (saveMgrRec?.full_name_en || saveMgrRec?.full_name || '');
     const savePos  = $('cb-mgr-pos')?.textContent  || '';
     const saveDate = $('cb-issue-date')?.textContent || todayThaiLong();
     const saveOfficer = resolveOfficerContact(container, staff, curOffId);
@@ -1660,7 +1691,6 @@ export async function initCertificateBuilder(container) {
       reqs[idx].cert_ready    = true;
       reqs[idx].canDownload   = true;
       reqs[idx].can_download  = true;
-      const saveMgrRec = managers.find(x => x.full_name === saveMgr);
       reqs[idx].hr_signer_name     = saveMgr;
       reqs[idx].hr_signer_position = savePos;
       reqs[idx].hr_signer_phone    = saveMgrRec?.phone || '';
@@ -1681,6 +1711,7 @@ export async function initCertificateBuilder(container) {
       const templateName = savedTmpl ? savedTmpl.name : (TEMPLATES[curTemplate]?.thLabel || curTemplate);
       reqs[idx].cert_template_id   = curTemplate;
       reqs[idx].cert_template_name = templateName;
+      reqs[idx].language = savedTmpl && isEnglishTemplate(savedTmpl) ? 'ภาษาอังกฤษ' : 'ภาษาไทย';
       reqs[idx].cert_number_generated = true;
 
       const issuer = getCurrentUser();
@@ -1739,6 +1770,7 @@ export async function initCertificateBuilder(container) {
           cert_template_name:  templateName,
           cert_number_generated: true,
           cert_issue_snapshot: reqs[idx].cert_issue_snapshot,
+          language: reqs[idx].language,
         });
       } catch (apiErr) {
         console.warn('[Certificate Builder] updateRequest to D1 failed (localStorage saved):', apiErr);
@@ -1753,9 +1785,9 @@ export async function initCertificateBuilder(container) {
     const curStoredForPrint = loadPublishedTemplates().find(t => t.id === curTemplate);
     const docId    = $('cb-docid-text')?.textContent || peekCertNumber(curStoredForPrint ? isEnglishTemplate(curStoredForPrint) : false);
     const rmkText  = $('cb-rmk-text')?.textContent || '';
-    const mgrName  = $('cb-mgr-name')?.textContent || '';
-    const mgrPos   = $('cb-mgr-pos')?.textContent  || '';
     const curMgr   = managers.find(x => String(x.id) === String(curMgrId));
+    const mgrName  = isThai() ? ($('cb-mgr-name')?.textContent || '') : (curMgr?.full_name_en || curMgr?.full_name || '');
+    const mgrPos   = $('cb-mgr-pos')?.textContent  || '';
     const mgrPhone = curMgr?.phone || '';
     const issueDate= $('cb-issue-date')?.textContent || todayThaiLong();
     const officer  = resolveOfficerContact(container, staff, curOffId);

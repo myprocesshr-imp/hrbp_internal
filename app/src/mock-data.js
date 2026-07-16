@@ -29,32 +29,9 @@ export function logout() {
 // ========================================
 // Mock Users (for login)
 // ========================================
-export const mockUsers = {
-  admin: {
-    id: 'U001',
-    username: 'admin',
-    name: 'Admin User',
-    nameDisplay: 'Admin User',
-    role: 'admin',
-    roleLabel: 'Super Admin',
-    empCode: 'EMP-2024-ADM',
-    department: 'People Operation',
-    avatar: null,
-  },
-  employee: {
-    id: 'U002',
-    username: 'employee',
-    name: 'อเล็กซ์ ริเวร่า',
-    nameDisplay: 'อเล็กซ์ ริเวร่า',
-    role: 'employee',
-    roleLabel: 'พนักงานอาวุโส',
-    empCode: 'EMP-2024-0892',
-    department: 'การออกแบบประสบการณ์ผู้ใช้',
-    position: 'นักออกแบบผลิตภัณฑ์อาวุโส',
-    startDate: '15 มกราคม 2564',
-    avatar: null,
-  },
-};
+// NOTE: Test/demo accounts (admin, employee) were removed.
+// Real users are provisioned via HRMS/IDMS or seeded from the backend.
+export const mockUsers = {};
 
 // ========================================
 // Employee Requests (_2 page data)

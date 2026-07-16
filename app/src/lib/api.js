@@ -8,38 +8,18 @@ const MOCK_DB_KEY_BUS = 'hrbp_mock_bus';
 const MOCK_DB_KEY_PICKUP = 'hrbp_pickup_locations';
 const MOCK_DB_KEY_CERT_MASTER = 'hrbp_cert_master_data';
 const MOCK_DB_VERSION_KEY = 'hrbp_mock_db_version';
-const MOCK_DB_VERSION = 3; // v3: EC-20260707-9887 removed, acknowledged_by as string, POST default to 'submitted'
+const MOCK_DB_VERSION = 5; // v5: Add chatchawan_tu to SEED_USERS
 
 const SEED_USERS = [
-  { id: 1, username: 'admin', full_name: 'Admin User', emp_id: 'EMP-2024-ADM', email: 'admin@company.com', phone: '0812345678', position: 'Super Admin', department: 'ทีมพัฒนาระบบ', company_name: 'Mango', role: 'admin', responsible_bu: [], status: 'active', start_date: '2024-01-01' },
-  { id: 2, username: 'employee', full_name: 'อเล็กซ์ ริเวร่า', emp_id: 'EMP-2024-0892', email: 'employee@company.com', phone: '0812345678', position: 'นักออกแบบผลิตภัณฑ์อาวุโส', department: 'การออกแบบประสบการณ์ผู้ใช้', company_name: 'Mango', role: 'employee', responsible_bu: [], status: 'active', start_date: '2024-01-01', sex_id: '2', fname_e: 'Alex', lname_e: 'Rivera' },
-  { id: 3, username: 'wipada.r', full_name: 'วิภาดา รักษาธรรม', emp_id: 'EMP-2024-001', email: 'wipada.r@company.com', phone: '0812345678', position: 'HR Manager', department: 'People Operation', company_name: 'Mango', role: 'hrmanager', responsible_bu: [], status: 'active' },
-  { id: 4, username: 'chaiyaphol.r', full_name: 'ชัยพล รัตนศิริ', emp_id: 'EMP-2024-015', email: 'chaiyaphol.r@company.com', phone: '0812345678', position: 'HRBP Specialist', department: 'Business Partnering', company_name: 'Mango', role: 'hrbp', responsible_bu: ['Technology'], status: 'active' },
-  { id: 5, username: 'hrmanager1', full_name: 'สมชาย รักดี', emp_id: 'EMP-HR-001', email: 'somchai@company.com', phone: '0811111111', position: 'HR Manager', department: 'People Operation', company_name: 'Mango', role: 'hrmanager', responsible_bu: [], status: 'active', start_date: '2020-01-01' },
-  { id: 6, username: 'hrmanager2', full_name: 'นภาพร ใจสว่าง', emp_id: 'EMP-HR-002', email: 'napaporn@company.com', phone: '0822222222', position: 'HR Manager', department: 'People Operation', company_name: 'Mango', role: 'hrmanager', responsible_bu: [], status: 'active', start_date: '2019-05-15' },
-  { id: 7, username: 'hrmanager3', full_name: 'กิตติพงษ์ ยอดเยี่ยม', emp_id: 'EMP-HR-003', email: 'kittipong@company.com', phone: '0833333333', position: 'HR Manager', department: 'People Operation', company_name: 'Mango', role: 'hrmanager', responsible_bu: [], status: 'active', start_date: '2021-03-10' },
-  { id: 8, username: 'hrmanager4', full_name: 'สุดารัตน์ พลเมือง', emp_id: 'EMP-HR-004', email: 'sudarat@company.com', phone: '0844444444', position: 'HR Manager', department: 'People Operation', company_name: 'Mango', role: 'hrmanager', responsible_bu: [], status: 'active', start_date: '2018-08-20' },
-  { id: 9, username: 'hrmanager5', full_name: 'ธนาธร สิทธิชัย', emp_id: 'EMP-HR-005', email: 'thanathorn@company.com', phone: '0855555555', position: 'HR Director', department: 'People Operation', company_name: 'Mango', role: 'hrmanager', responsible_bu: [], status: 'active', start_date: '2015-11-01' },
+  { id: 3, username: 'wipada.r', full_name: 'วิภาดา รักษาธรรม', emp_id: 'EMP-2024-001', email: 'wipada.r@company.com', phone: '0812345678', position: 'HR Manager', department: 'People Operation', company_name: 'Mango', role: 'hrmanager', responsible_bu: [], status: 'active', fname_e: 'Wipada', lname_e: 'Raksatham' },
+  { id: 4, username: 'chaiyaphol.r', full_name: 'ชัยพล รัตนศิริ', emp_id: 'EMP-2024-015', email: 'chaiyaphol.r@company.com', phone: '0812345678', position: 'HRBP Specialist', department: 'Business Partnering', company_name: 'Mango', role: 'hrbp', responsible_bu: ['Technology'], status: 'active', fname_e: 'Chaiyaphol', lname_e: 'Rattanasiri' },
+  { id: 10, username: 'chatchawan_tu', full_name: 'ชัชวาลย์ ตุลาผล', emp_id: 'EMP-10005208', email: 'chatchawan_tu@mibholding.com', phone: '0858353379', position: 'Operation Process Improvement Section Manager', department: 'Improvement', company_name: 'บริษัท ไอพี 5 จำกัด', role: 'admin', responsible_bu: [], status: 'active', start_date: '2007-07-16', fname_e: 'Chatchawan', lname_e: 'Tulaphon' },
 ];
 
-function initMockDB() {
-  // Version check – clear cache on version bump
+export function initMockDB() {
+  // Version check – update version stamp (don't wipe users; merge logic below handles new seeds)
   const savedVersion = localStorage.getItem(MOCK_DB_VERSION_KEY);
   if (savedVersion !== String(MOCK_DB_VERSION)) {
-    // Clear all hrbp mock data to force reseed
-    localStorage.removeItem('hrbp_employee_requests');
-    localStorage.removeItem('hrbp_requests');
-    localStorage.removeItem(MOCK_DB_KEY_USERS);
-    localStorage.removeItem(MOCK_DB_KEY_BUS);
-    localStorage.removeItem('hrbp_pickup_locations');
-    localStorage.removeItem('hrbp_cert_master_data');
-    // Also clear employee request cache
-    const keysToRemove = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith('hrbp_')) keysToRemove.push(key);
-    }
-    keysToRemove.forEach(k => localStorage.removeItem(k));
     localStorage.setItem(MOCK_DB_VERSION_KEY, String(MOCK_DB_VERSION));
   }
 
@@ -95,7 +75,7 @@ function initMockDB() {
         attachments: [
           { name: 'สลิปเงินเดือน.pdf', key: 'supporting-docs/a1b2c3d4-สลิปเงินเดือน.pdf', size: 245760 },
         ],
-        user_email: 'employee@company.com',
+        user_email: 'wipada.r@company.com',
       },
       {
         id: 'EC-20260520-0942',
@@ -106,7 +86,7 @@ function initMockDB() {
         canCancel: false,
         canDownload: true,
         attachments: [],
-        user_email: 'employee@company.com',
+        user_email: 'wipada.r@company.com',
       },
       {
         id: 'EC-20260415-0118',
@@ -120,7 +100,7 @@ function initMockDB() {
         attachments: [
           { name: 'สำเนาหนังสือเดินทาง.pdf', key: 'supporting-docs/e5f6g7h8-สำเนาหนังสือเดินทาง.pdf', size: 512000 },
         ],
-        user_email: 'employee@company.com',
+        user_email: 'wipada.r@company.com',
       },
       {
         id: 'EC-20260310-0023',
@@ -133,7 +113,7 @@ function initMockDB() {
         attachments: [
           { name: 'รูปโปรไฟล์.jpg', key: 'supporting-docs/i9j0k1l2-รูปโปรไฟล์.jpg', size: 102400 },
         ],
-        user_email: 'employee@company.com',
+        user_email: 'wipada.r@company.com',
       },
     ];
     localStorage.setItem('hrbp_employee_requests', JSON.stringify(defaultRequests));

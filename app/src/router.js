@@ -54,7 +54,7 @@ export function startRouter() {
       }
     } catch (err) {
       console.error(`[Router] Error on route "${path}":`, err);
-      if (appEl) {
+      if (appEl && getCurrentRoute() === path) {
         appEl.innerHTML = `
           <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;">
             <div style="text-align:center;padding:2rem;">
