@@ -630,7 +630,7 @@ function mockEmployee() {
           nameEN = `${req.fname_e} ${req.lname_e || ''}`.trim();
         }
         if (!nameEN) {
-          nameEN = (user.username ? user.username.split('.').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ') : '')
+          nameEN = (user.username ? user.username.split(/[._]/).map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ') : '')
             || defaultEmp.nameEN;
         }
 
@@ -1034,7 +1034,7 @@ export async function initCertificateBuilder(container) {
           const cat = docTypeToCat[req.doc_type]
             || DOC_CAT_MAP[req.type || req.purpose || '']
             || '';
-          const wantEng = req.language === 'ภาษาอังกฤษ' || req.language === 'en';
+          const wantEng = req.language === 'ภาษาอังกฤษ' || req.language === 'อังกฤษ' || req.language === 'en';
           if (cat) {
             const found = storedTemplates.find(t =>
               t.category === cat &&

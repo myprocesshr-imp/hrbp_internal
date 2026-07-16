@@ -124,9 +124,23 @@ registerRoute('/admin/certificate-builder', async (appEl) => {
     if (el) document.body.appendChild(el);
   });
 
+  // Attach close-button handler immediately via document delegation so it works
+  // even before initCertificateBuilder finishes its async setup (seedTemplates, getTemplates).
+  const cbCloseHandler = (e) => {
+    if (e.target.closest('#cb-close-btn')) {
+      e.preventDefault();
+      CB_BUILDER_IDS.forEach((id) => document.getElementById(id)?.remove());
+      navigate('/admin/dashboard');
+    }
+  };
+  document.addEventListener('click', cbCloseHandler, true);
+
   const cleanupInner = await initCertificateBuilder(builderRoot);
 
+  document.removeEventListener('click', cbCloseHandler, true);
+
   return () => {
+    document.removeEventListener('click', cbCloseHandler, true);
     if (cleanupInner) cleanupInner();
     removeCertificateBuilderDom();
   };
