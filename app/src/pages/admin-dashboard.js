@@ -434,13 +434,13 @@ export function renderAdminDashboard(data) {
     </div>
 
     <!-- Pending Requests Table -->
-    <div class="tonal-card overflow-hidden border border-outline-variant mb-8">
+    <div class="tonal-card border border-outline-variant rounded-2xl mb-8">
       <div class="p-6 border-b border-outline-variant flex justify-between items-center flex-wrap gap-3">
         <h3 class="text-headline-md font-bold text-primary">${t('dashboard.tableTitle')}</h3>
         <button id="btn-export-csv" class="text-label-md text-primary font-bold hover:underline">${t('common.export')}</button>
       </div>
       
-      <div class="overflow-x-auto">
+      <div class="overflow-x-auto overflow-y-visible">
         <table class="w-full text-left">
           <thead class="bg-surface-container-low text-label-sm text-on-surface-variant font-bold border-b border-outline-variant">
             <tr>
