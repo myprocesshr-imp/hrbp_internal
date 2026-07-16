@@ -194,37 +194,6 @@ export function renderLoginPage() {
             </p>
           </div>
 
-          ${!isProductionHost() ? `
-          <!-- Demo hint (dev only) -->
-          <div class="mt-6 bg-primary-fixed/30 rounded-xl p-4 border border-primary/10">
-            <p class="text-label-sm font-bold text-primary mb-2">${t('login.demoHint')}</p>
-            <div class="grid grid-cols-2 gap-3 text-label-sm text-on-surface-variant">
-              <div>
-                <p class="font-semibold text-on-surface">${t('login.demoAdmin')}</p>
-                <button type="button" class="quick-login text-left hover:bg-surface-container-high rounded p-1 transition-colors w-full" data-user="admin">
-                  user: <code class="bg-surface-container-high px-1.5 py-0.5 rounded text-primary font-mono">admin</code>
-                </button>
-              </div>
-              <div>
-                <p class="font-semibold text-on-surface">${t('login.demoEmployee')}</p>
-                <button type="button" class="quick-login text-left hover:bg-surface-container-high rounded p-1 transition-colors w-full" data-user="employee">
-                  user: <code class="bg-surface-container-high px-1.5 py-0.5 rounded text-primary font-mono">employee</code>
-                </button>
-              </div>
-            </div>
-
-            <p class="text-label-sm font-bold text-primary mt-4 mb-2">HR Managers (Quick Login)</p>
-            <div class="grid grid-cols-2 gap-2 text-[11px] text-on-surface-variant">
-              <button type="button" class="quick-login text-left hover:bg-surface-container-high rounded p-1.5 transition-colors border border-outline-variant" data-user="hrmanager1">1. สมชาย รักดี</button>
-              <button type="button" class="quick-login text-left hover:bg-surface-container-high rounded p-1.5 transition-colors border border-outline-variant" data-user="hrmanager2">2. นภาพร ใจสว่าง</button>
-              <button type="button" class="quick-login text-left hover:bg-surface-container-high rounded p-1.5 transition-colors border border-outline-variant" data-user="hrmanager3">3. กิตติพงษ์ ยอดเยี่ยม</button>
-              <button type="button" class="quick-login text-left hover:bg-surface-container-high rounded p-1.5 transition-colors border border-outline-variant" data-user="hrmanager4">4. สุดารัตน์ พลเมือง</button>
-              <button type="button" class="quick-login text-left hover:bg-surface-container-high rounded p-1.5 transition-colors border border-outline-variant" data-user="hrmanager5">5. ธนาธร สิทธิชัย</button>
-            </div>
-
-            <p class="text-[11px] text-outline mt-3">${t('login.demoPassword')}</p>
-          </div>
-          ` : ''}
         </div>
       </div>
 
