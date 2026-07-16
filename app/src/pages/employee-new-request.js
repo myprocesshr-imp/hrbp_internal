@@ -383,7 +383,7 @@ export function renderNewRequest() {
         </section>
 
         <!-- ===== Step 3: Delivery Method ===== -->
-        <section class="bg-white p-6 md:p-8 rounded-xl card-shadow border border-outline-variant/40">
+        <section id="delivery-section" class="bg-white p-6 md:p-8 rounded-xl card-shadow border border-outline-variant/40">
           <div class="flex items-center gap-4 mb-8">
             <span class="h-9 w-9 rounded-full bg-primary-fixed flex items-center justify-center text-primary font-bold text-lg">3</span>
             <h3 class="text-headline-md text-primary tracking-tight">${t('newReq.sectionDelivery')}</h3>
@@ -600,9 +600,45 @@ export async function initNewRequest(container) {
   const uploadedFiles = [];
 
   // ── Detect on-behalf-of mode ───────────────────────────────────
-  const onBehalfEmpId = new URLSearchParams(window.location.hash.split('?')[1] || '').get('on_behalf_of') || '';
+  const params = new URLSearchParams(window.location.hash.split('?')[1] || '');
+  const onBehalfEmpId = params.get('on_behalf_of') || '';
   const isOnBehalf = !!onBehalfEmpId;
+  const resubmitId = params.get('resubmit') || '';
   let targetEmployee = null; // resolved employee when in on-behalf mode
+
+  // ── Resubmit: load original requester data so the new request keeps
+  //    the employee's identity (not the session user / HR who clicks resubmit) ──
+  if (resubmitId) {
+    try {
+      const all = JSON.parse(localStorage.getItem('hrbp_employee_requests') || '[]');
+      const orig = all.find(r => (r.id || r.request_code) === resubmitId);
+      if (orig) {
+        // Fallback to mock_users by user_email if the stored request lacks identity fields
+        let fallback = {};
+        try {
+          const users = JSON.parse(localStorage.getItem('hrbp_mock_users') || '[]');
+          const email = (orig.user_email || '').toLowerCase();
+          fallback = users.find(u => (email && (u.email || '').toLowerCase() === email)
+            || (orig.emp_id && String(u.emp_id) === String(orig.emp_id))) || {};
+        } catch (_) {}
+        targetEmployee = {
+          emp_id: orig.emp_id || orig.empCode || fallback.emp_id || '',
+          full_name: orig.full_name || orig.employee_name || fallback.full_name || '',
+          position: orig.position || fallback.position || '',
+          department: orig.department || fallback.department || '',
+          company_name: orig.company_name || orig.companyName || fallback.company_name || '',
+          email: orig.user_email || fallback.email || '',
+          phone: orig.phone || fallback.phone || '',
+          start_date: orig.start_date || orig.startDate || fallback.start_date || '',
+          sex_id: orig.sex_id || fallback.sex_id || '',
+          fname_e: orig.fname_e || fallback.fname_e || '',
+          lname_e: orig.lname_e || fallback.lname_e || '',
+        };
+        // Prefill the read-only employee fields
+        fillEmployeeFields(targetEmployee);
+      }
+    } catch (_) {}
+  }
 
   // ── Breadcrumb navigation ──────────────────────────────────────
   container.querySelector('[data-navigate="/employee/requests"]')?.addEventListener('click', (e) => {
@@ -1025,7 +1061,7 @@ export async function initNewRequest(container) {
 
   container.querySelector('#btn-preview-request')?.addEventListener('click', () => {
     const curUser = getCurrentUser();
-    const empTarget = (isOnBehalf && targetEmployee) ? targetEmployee : curUser;
+    const empTarget = (targetEmployee) ? targetEmployee : curUser;
     const docType  = getSelectedDocType();
     const selectedTplPreviewEl = container.querySelector('.doc-type-radio:checked');
     const purpose  = container.querySelector('.purpose-radio:checked')?.value;
@@ -1102,6 +1138,33 @@ export async function initNewRequest(container) {
   const submitBtn = container.querySelector('#btn-submit-request');
   if (submitBtn) {
     submitBtn.addEventListener('click', async () => {
+      // ── Validate delivery method (must pick at least one) ──
+      const deliveryArr = Array.from(container.querySelectorAll('input[name="delivery"]:checked')).map(c => c.value);
+      if (deliveryArr.length === 0) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = t('newReq.previewSubmitBtn');
+        const deliverySection = container.querySelector('#delivery-section');
+        deliverySection?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        deliverySection?.classList.add('ring-2', 'ring-error', 'rounded-lg');
+        setTimeout(() => deliverySection?.classList.remove('ring-2', 'ring-error', 'rounded-lg'), 2500);
+        showToast(t('newReq.deliveryRequired') || 'กรุณาเลือกรูปแบบการรับเอกสาร', 'error');
+        return;
+      }
+      // Physical delivery requires a pickup location
+      if (deliveryArr.includes('physical')) {
+        const pickupLoc = container.querySelector('input[name="pickup_location"]:checked')?.value;
+        if (!pickupLoc) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = t('newReq.previewSubmitBtn');
+          const pickupSection = container.querySelector('#physical-location-picker');
+          pickupSection?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          pickupSection?.classList.add('ring-2', 'ring-error', 'rounded-lg');
+          setTimeout(() => pickupSection?.classList.remove('ring-2', 'ring-error', 'rounded-lg'), 2500);
+          showToast(t('newReq.pickupRequired') || 'กรุณาเลือกสถานที่รับเอกสาร', 'error');
+          return;
+        }
+      }
+
       submitBtn.disabled = true;
       submitBtn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[20px]">sync</span> ' + t('newReq.submitting');
 
@@ -1142,8 +1205,8 @@ export async function initNewRequest(container) {
         const extra = collectExtraFields(docType, purpose);
         const notes = container.querySelector('#notes-textarea')?.value?.trim() || '';
 
-        // Resolve employee info: use targetEmployee in on-behalf mode, else curUser
-        const empTarget = (isOnBehalf && targetEmployee) ? targetEmployee : curUser;
+        // Resolve employee info: use targetEmployee (on-behalf OR resubmit), else curUser
+        const empTarget = (targetEmployee) ? targetEmployee : curUser;
 
         // Add to employeeRequests
         const newReq = {

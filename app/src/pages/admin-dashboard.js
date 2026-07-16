@@ -1341,6 +1341,8 @@ export function initAdminDashboard(container) {
       rejected_by: getCurrentUser()?.full_name || 'HR',
       canResubmit: true,
       canCancel: false,
+    }).then(() => {
+      refreshDashboard();
     }).catch(err => console.warn('[Reject] DataService update error:', err));
   });
 

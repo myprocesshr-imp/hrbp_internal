@@ -92,6 +92,7 @@ function isEmployeeCancelled(req) {
 
 /** Render the <tr> rows for a given list of (already-visible) requests */
 function renderTableRows(visibleRequests) {
+  const user = getCurrentUser();
   if (!visibleRequests || visibleRequests.length === 0) {
     return `<tr><td colspan="7" class="px-6 py-16 text-center text-on-surface-variant">${t('common.noResults')}</td></tr>`;
   }
@@ -102,6 +103,17 @@ function renderTableRows(visibleRequests) {
     })();
     const dateStr = req.date || req.created_at || '';
     const typeStr = req.type || req.purpose || '';
+    // ── Created-by label (on-behalf = HR name, self = requester name) ──
+    const createdByName = req.created_by_name
+      || req.full_name
+      || req.employee_name
+      || user?.full_name
+      || user?.nameDisplay
+      || user?.name
+      || '';
+    const createdByLabel = createdByName
+      ? `<div class="text-[11px] text-outline mt-0.5">${t('employeeReq.createdBy')} ${createdByName}</div>`
+      : '';
     const hasEta = !!req.eta_date;
     const isCertReady = !!req.cert_ready;
     const statusLabelMap = { 'submitted': t('status.submitted'), 'in-review': t('status.inReview'), 'approved': t('status.approved'), 'rejected': t('status.rejected'), 'cancelled': t('status.cancelled') };
@@ -120,7 +132,7 @@ function renderTableRows(visibleRequests) {
       <tr class="hover:bg-surface-container-low transition-colors cursor-pointer request-row" data-id="${req.id || req.request_code}" data-status="${req.status}" data-type="${typeStr}" data-date="${dateStr}" data-status-label="${effectiveLabel}" data-attachments='${JSON.stringify(attachments)}' data-eta="${req.eta_date || ''}" data-cert-ready="${req.cert_ready ? 'true' : ''}">
         <td class="px-6 py-5 text-label-md font-bold text-primary">${req.id || req.request_code}</td>
         <td class="px-6 py-5 text-body-md text-on-surface-variant">${dateStr}</td>
-        <td class="px-6 py-5 text-body-md text-on-surface">${typeStr}</td>
+        <td class="px-6 py-5 text-body-md text-on-surface">${typeStr}${createdByLabel}</td>
         <td class="px-6 py-5">${attachments.length > 0 ? `<span class="inline-flex items-center gap-1 text-label-sm text-primary"><span class="material-symbols-outlined text-[16px]">attach_file</span>${attachments.length} ${t('employeeReq.fileCount')}</span>` : '<span class="text-label-sm text-outline">-</span>'}</td>
         <td class="px-6 py-5">
           ${getStatusBadge(effectiveStatus, effectiveLabel)}
@@ -128,23 +140,21 @@ function renderTableRows(visibleRequests) {
         <td class="px-6 py-5 text-body-md">
           ${etaDisplay ? `<span class="text-primary font-bold">${etaDisplay}</span>` : '<span class="text-outline">-</span>'}
         </td>
-        <td class="px-6 py-5 text-right">
-          <div class="flex justify-end gap-2 items-center">
-            <button class="p-2 hover:bg-surface-container rounded-lg transition-colors text-primary btn-view" data-id="${req.id || req.request_code}" title="${t('employeeReq.modalTitle')}">
-              <span class="material-symbols-outlined">visibility</span>
-            </button>
+        <td class="px-6 py-5">
+          <div class="flex items-center gap-2">
             ${(req.can_download || req.canDownload) ? `
-              <button class="p-2 hover:bg-surface-container rounded-lg transition-colors text-primary btn-download" data-id="${req.id || req.request_code}" title="${t('common.download')}">
-                <span class="material-symbols-outlined">download</span>
+              <button class="px-3 py-1.5 bg-primary text-on-primary rounded-lg text-label-sm font-medium hover:opacity-90 transition-opacity btn-download" data-id="${req.id || req.request_code}" title="${t('common.download')}">
+                <span class="material-symbols-outlined text-[16px] align-middle">download</span>
+                <span class="ml-1">${t('common.download')}</span>
               </button>
             ` : ''}
             ${req.can_cancel || req.canCancel ? `
-              <button class="p-2 hover:bg-surface-container rounded-lg transition-colors text-outline hover:text-error btn-cancel" data-id="${req.request_code || req.id}" title="${t('common.cancel')}">
-                <span class="material-symbols-outlined">close</span>
+              <button class="p-2 hover:bg-error-container/20 rounded-lg transition-colors text-error btn-cancel" data-id="${req.request_code || req.id}" title="${t('common.cancel')}">
+                <span class="material-symbols-outlined text-[18px]">close</span>
               </button>
             ` : ''}
             ${req.can_resubmit || req.canResubmit ? `
-              <button class="px-3 py-1 bg-primary text-on-primary rounded-lg text-label-sm hover:opacity-90 transition-opacity btn-resubmit" data-id="${req.id || req.request_code}">${t('common.resubmit')}</button>
+              <button class="px-3 py-1.5 border border-primary text-primary rounded-lg text-label-sm font-medium hover:bg-primary/5 transition-colors btn-resubmit" data-id="${req.id || req.request_code}">${t('common.resubmit')}</button>
             ` : ''}
           </div>
         </td>

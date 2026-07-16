@@ -709,6 +709,7 @@ function generateMockRequests() {
         can_resubmit: stored.canResubmit ?? normalized.can_resubmit ?? normalized.canResubmit ?? (mergedStatus === 'rejected'),
         canResubmit: stored.canResubmit ?? normalized.can_resubmit ?? normalized.canResubmit ?? (mergedStatus === 'rejected'),
         user_email: normalized.user_email || '',
+        full_name: u.full_name || normalized.full_name || normalized.employee_name || '',
         emp_id: u.emp_id || u.empCode || '',
         position: u.position || '',
         start_date: u.start_date || '',
