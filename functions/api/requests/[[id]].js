@@ -16,6 +16,8 @@ function mapRequestRow(r, userRow) {
     type: meta.type || r.purpose || '',
     purpose: meta.purpose || r.purpose || '',
     doc_type: meta.doc_type || '',
+    template_id: meta.template_id || '',
+    template_name: meta.template_name || '',
     purpose_value: meta.purpose_value || '',
     language: meta.language || r.language || '',
     salary: meta.salary || '',
