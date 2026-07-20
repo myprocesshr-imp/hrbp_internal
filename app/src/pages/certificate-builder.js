@@ -24,29 +24,15 @@ import { syncVisaAbroadTemplateInStorage, syncWorkEnTemplateInStorage, syncWorkT
 import {
   allocateCertNumber,
   buildCertIssueSnapshot,
-  finalizeCertificateOutputHtml,
   formatCertNumber,
   parseCertNumber,
   peekCertNumber,
   syncCertCounter,
 } from '../lib/templates.js';
+// NOTE: finalizeCertificateHtml moved to cert-renderer.js; import from there instead
+import { fillPlaceholders, parseTemplateHtml, signatureImgHtml, finalizeCertificateHtml, escapeHtmlAttr } from '../lib/cert-renderer.js';
+import { resolveCompanyAddress, enrichCertWithCompanyAddress, getCompanyMap } from '../lib/company-address.js';
 import { isoToday, computeDownloadUntil, parseThaiIssuedDate } from '../lib/download-policy.js';
-
-function fillTemplatePlaceholders(html, reps) {
-  let out = html;
-  Object.keys(reps).forEach(k => {
-    out = out.replace(new RegExp(`{{${k}}}`, 'g'), reps[k] ?? '');
-  });
-  return out;
-}
-
-function parseTemplateHtml(html) {
-  const styleBlocks = html.match(/<style[^>]*>[\s\S]*?<\/style>/gi) || [];
-  const styles = styleBlocks.map(s => s.replace(/<\/?style[^>]*>/gi, '')).join('\n');
-  const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
-  const bodyContent = bodyMatch ? bodyMatch[1].trim() : html;
-  return { styles, bodyContent };
-}
 
 function setStoredTemplateMode(active) {
   const a4 = document.getElementById('cb-a4');
@@ -65,64 +51,9 @@ function ensureTemplateStyleEl() {
   return el;
 }
 
-function resolveCompanyAddress(emp, th) {
-  let ca_th = '';
-  let ca_en = '';
-  let coNameTh = '';
-  let coNameEn = '';
-  const compName = emp?.company || '';
-  const co = COMPANY_MAP[compName] || { th: compName, en: compName };
-  coNameTh = co.th;
-  coNameEn = co.en;
+// resolveCompanyAddress moved to lib/company-address.js — imported at top
 
-  try {
-    const masterDataStr = localStorage.getItem('hrbp_cert_master_data');
-    if (masterDataStr) {
-      const md = JSON.parse(masterDataStr);
-      const foundCo = md.companies?.find(c =>
-        (c.name && compName.toLowerCase().includes(c.name.toLowerCase())) ||
-        (c.name_en && compName.toLowerCase().includes(c.name_en.toLowerCase())) ||
-        (c.name && c.name.toLowerCase().includes(compName.toLowerCase())) ||
-        (c.name_en && c.name_en.toLowerCase().includes(compName.toLowerCase()))
-      );
-      if (foundCo) {
-        if (foundCo.name) coNameTh = foundCo.name;
-        if (foundCo.name_en) coNameEn = foundCo.name_en;
-        const addr = md.addresses?.find(a => a.company_id === foundCo.id);
-        if (addr) {
-          ca_th = addr.address || '';
-          ca_en = addr.address_en || addr.address || '';
-        }
-      }
-    }
-  } catch (_) {}
-
-  if (!ca_th) {
-    if (compName.includes('Mango') || compName.includes('แมงโก้')) {
-      ca_th = '123 อาคารสิริภิญโญ ชั้น 8 ถนนศรีอยุธยา แขวงถนนพญาไท เขตราชเทวี กรุงเทพมหานคร 10400';
-      ca_en = '123 Siripinyo Building, 8th Floor, Sri Ayutthaya Road, Ratchathewi, Bangkok 10400';
-    } else if (compName.includes('Corporate') || compName.includes('คอร์ปอเรท')) {
-      ca_th = '456 อาคารออลซีซั่นส์ เพลส ชั้น 20 ถนนวิทยุ แขวงลุมพินี เขตปทุมวัน กรุงเทพมหานคร 10330';
-      ca_en = '456 All Seasons Place, 20th Floor, Wireless Road, Pathum Wan, Bangkok 10330';
-    } else if (compName.includes('HRBP') || compName.includes('เอชอาร์บีพี')) {
-      ca_th = '789 อาคารเอ็มไพร์ ทาวเวอร์ ชั้น 35 ถนนสาทรใต้ แขวงยานนาวา เขตสาทร กรุงเทพมหานคร 10120';
-      ca_en = '789 Empire Tower, 35th Floor, South Sathorn Road, Sathon, Bangkok 10120';
-    } else {
-      ca_th = '123/45 ถนนสุขุมวิท แขวงคลองเตย เขตคลองเตย กรุงเทพมหานคร 10110';
-      ca_en = '123/45 Sukhumvit Road, Khlong Toei, Bangkok 10110';
-    }
-  }
-
-  return {
-    coNameTh,
-    coNameEn,
-    address: th ? ca_th : ca_en,
-    addressTh: ca_th,
-    addressEn: ca_en,
-  };
-}
-
-// ─── CONSTANTS ────────────────────────────────────────────────
+	// ─── CONSTANTS ────────────────────────────────────────────────
 const FOOTER_LANDLINE  = '038-540330';
 const SIGNATURES_KEY   = 'hrbp_hr_signatures';
 const MOCK_USERS_KEY   = 'hrbp_mock_users';
@@ -139,11 +70,11 @@ const THAI_MONTHS_SHORT = [
 
 // ─── MASTER DATA ──────────────────────────────────────────────
 const DEFAULT_HR_STAFF = [
-  { id: 'U003', full_name: 'วิภาดา รักษาธรรม', role: 'admin', position: 'HR Manager', email: 'wipada.r@company.com', phone: '081-234-5678', responsible_bu: 'People Operation', is_manager: true },
-  { id: 'U004', full_name: 'ชัยพล รัตนศิริ',   role: 'hrbp',  position: 'HRBP Specialist', email: 'chaiyaphol.r@company.com', phone: '081-234-5679', responsible_bu: 'Business Partnering', is_manager: false },
-  { id: 'HR003', full_name: 'สมชาย รักงาน',    role: 'hrbp',  position: 'HRBP - Technology', email: 'somchai.r@company.com', phone: '081-234-5680', responsible_bu: 'Technology', is_manager: false },
-  { id: 'HR004', full_name: 'สมหญิง จริงใจ',   role: 'hrbp',  position: 'HRBP - Marketing', email: 'somying.j@company.com', phone: '081-234-5681', responsible_bu: 'Marketing', is_manager: false },
-  { id: 'HR005', full_name: 'นภา สดใส',        role: 'hrbp',  position: 'HRBP - Design & Product', email: 'napa.s@company.com', phone: '081-234-5682', responsible_bu: 'Design & Product', is_manager: false },
+  { id: 'U003', full_name: 'วิภาดา รักษาธรรม', full_name_en: 'Wipada Raksathum', role: 'admin', position: 'HR Manager', position_en: 'HR Manager', email: 'wipada.r@company.com', phone: '081-234-5678', responsible_bu: 'People Operation', is_manager: true },
+  { id: 'U004', full_name: 'ชัยพล รัตนศิริ',   full_name_en: 'Chaiyaphol Ratanasiri', role: 'hrbp',  position: 'HRBP Specialist', position_en: 'HRBP Specialist', email: 'chaiyaphol.r@company.com', phone: '081-234-5679', responsible_bu: 'Business Partnering', is_manager: false },
+  { id: 'HR003', full_name: 'สมชาย รักงาน',    full_name_en: 'Somchai Rakngan', role: 'hrbp',  position: 'HRBP - Technology', position_en: 'HRBP - Technology', email: 'somchai.r@company.com', phone: '081-234-5680', responsible_bu: 'Technology', is_manager: false },
+  { id: 'HR004', full_name: 'สมหญิง จริงใจ',   full_name_en: 'Somying Jingjai', role: 'hrbp',  position: 'HRBP - Marketing', position_en: 'HRBP - Marketing', email: 'somying.j@company.com', phone: '081-234-5681', responsible_bu: 'Marketing', is_manager: false },
+  { id: 'HR005', full_name: 'นภา สดใส',        full_name_en: 'Napa Sodsai', role: 'hrbp',  position: 'HRBP - Design & Product', position_en: 'HRBP - Design & Product', email: 'napa.s@company.com', phone: '081-234-5682', responsible_bu: 'Design & Product', is_manager: false },
 ];
 
 const DEFAULT_REMARKS = [
@@ -157,11 +88,7 @@ const DEFAULT_REMARKS = [
   { id: 'R008', th: 'ตามที่พนักงานร้องขอ',                       en: 'As requested by employee' },
 ];
 
-const COMPANY_MAP = {
-  'Mango':      { th: 'บริษัท แมงโก้ จำกัด',                   en: 'Mango Company Limited' },
-  'Corporate':  { th: 'บริษัท คอร์ปอเรท คลาริตี้ จำกัด',        en: 'Corporate Clarity Company Limited' },
-  'HRBP Group': { th: 'บริษัท เอชอาร์บีพี กรุ๊ป จำกัด',          en: 'HRBP Group Company Limited' },
-};
+// COMPANY_MAP moved to lib/company-address.js — use getCompanyMap()
 
 const CATEGORY_CONFIG = {
   'หนังสือรับรองการทำงาน': { showSalary: false, titleTH: 'หนังสือรับรองการทำงาน', titleEN: 'Certificate of Employment' },
@@ -251,13 +178,6 @@ function officerNameFromUi(getEl, staff, curOffId) {
   return '';
 }
 
-function signatureImgHtml(sigSrc, alt = 'Signature') {
-  if (!sigSrc) return '';
-  const safeSrc = String(sigSrc).replace(/"/g, '&quot;');
-  const safeAlt = escapeHtmlAttr(alt);
-  return `<img src="${safeSrc}" alt="${safeAlt}" style="max-height:100%;max-width:100%;object-fit:contain;" />`;
-}
-
 function openCertificatePrintWindow(html) {
   const win = window.open('', '_blank');
   if (!win) return null;
@@ -337,8 +257,17 @@ export async function prefetchHRStaff() {
       const merged = [...existing];
       res.users.forEach(u => {
         const idx = merged.findIndex(e => e.id === u.id || e.username === u.username);
-        if (idx >= 0) Object.assign(merged[idx], u);
-        else merged.push(u);
+        if (idx >= 0) {
+          // Preserve fname_e/lname_e from existing data when API returns empty
+          // (D1 records may have been inserted without these fields — e.g. migration 008)
+          const prev = merged[idx];
+          Object.assign(merged[idx], u);
+          if (!u.fname_e && prev.fname_e) merged[idx].fname_e = prev.fname_e;
+          if (!u.lname_e && prev.lname_e) merged[idx].lname_e = prev.lname_e;
+          if (!u.full_name_en && prev.full_name_en) merged[idx].full_name_en = prev.full_name_en;
+        } else {
+          merged.push(u);
+        }
       });
       localStorage.setItem(MOCK_USERS_KEY, JSON.stringify(merged));
     }
@@ -376,13 +305,6 @@ function loadPublishedTemplates() {
 
 function getHrbpStaff(staffList) {
   return staffList.filter(o => o.role === 'hrbp');
-}
-
-function escapeHtmlAttr(val) {
-  return String(val ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;');
 }
 
 function normalizeRemarkItem(note, index) {
@@ -528,9 +450,10 @@ function loadHRStaff() {
         emp_id: u.emp_id || '',
         username: u.username || '',
         full_name: u.full_name || '',
-        full_name_en: [u.fname_e, u.lname_e].filter(Boolean).join(' ') || u.full_name || '',
+        full_name_en: u.full_name_en || [u.fname_e, u.lname_e].filter(Boolean).join(' ') || u.full_name || '',
         role: u.role,
         position: u.position || (u.role === 'admin' ? 'HR Manager' : 'HR Officer'),
+        position_en: u.position_en || u.position || (u.role === 'admin' ? 'HR Manager' : 'HR Officer'),
         email: u.email || '',
         phone: u.phone || u.mobile || '',
         responsible_bu: Array.isArray(u.responsible_bu) ? u.responsible_bu.join(', ') : (u.responsible_bu || ''),
@@ -684,7 +607,7 @@ export function renderCertificateBuilder() {
   hrDataCache = { managers, staff, remarks };
   const sigs       = loadSignatures();
   const emp        = mockEmployee();
-  const company    = COMPANY_MAP[emp.company] || { th: emp.company, en: emp.company };
+  const company    = getCompanyMap()[emp.company] || { th: emp.company, en: emp.company };
   const firstMgr   = managers[0];
   const firstSig   = firstMgr ? sigs[firstMgr.id] : null;
 
@@ -966,15 +889,16 @@ export async function initCertificateBuilder(container) {
 
   // Re-populate template select options now that API templates are loaded
   // (renderCertificateBuilder() renders before init fetches from API)
-  {
-    const tSel = document.getElementById('cb-tmpl-select');
-    if (tSel) {
-      const storedAll = loadPublishedTemplates();
-      tSel.innerHTML = storedAll.length > 0
-        ? storedAll.map(t => `<option value="${t.id}">${t.name}</option>`).join('')
-        : Object.entries(TEMPLATES).map(([k,v]) => `<option value="${k}">${isThai() ? v.thLabel : v.enLabel}</option>`).join('');
-    }
-  }
+{
+	    const tSel = document.getElementById('cb-tmpl-select');
+	    if (tSel) {
+	      const storedAll = loadPublishedTemplates();
+	      tSel.innerHTML = storedAll.length > 0
+	        ? storedAll.map(t => `<option value="${t.id}">${t.name}</option>`).join('')
+	        : Object.entries(TEMPLATES).map(([k,v]) => `<option value="${k}">${isThai() ? v.thLabel : v.enLabel}</option>`).join('');
+	      tSel.value = curTemplate;
+	    }
+	  }
 
   // ── Element accessor (stored template: prefer controls inside #cb-body)
   const queryCertEl = (id, scope) => {
@@ -1100,11 +1024,16 @@ export async function initCertificateBuilder(container) {
     setDocIdDisplay(resolveDocIdForRequest(loadedReq, curStoredForDoc ? isEnglishTemplate(curStoredForDoc) : false));
   }
 
+  // Apply initial template with request data (if loadedReq is available)
+  try { applyTmpl(curTemplate); } catch (err) {
+    console.warn('[Certificate Builder] Initial applyTmpl failed:', err);
+  }
+
   // ── Patch employee data into outer DOM after request is loaded
   if (loadedReq) {
     const emp = mockEmployee();
     const th = isThai();
-    const co = COMPANY_MAP[emp.company] || { th: emp.company, en: emp.company };
+    const co = getCompanyMap()[emp.company] || { th: emp.company, en: emp.company };
     const setEl = (id, val) => { const el = $(id); if (el) el.textContent = val; };
     setEl('cb-emp-name', th ? emp.nameTH : emp.nameEN);
     setEl('cb-emp-empcode', emp.empCode);
@@ -1225,7 +1154,7 @@ export async function initCertificateBuilder(container) {
     const storedTmpl = storedTemplates.find(t => t.id === curTemplate);
     const th = isThai();
     const emp = mockEmployee();
-    const co = COMPANY_MAP[emp.company] || { th: emp.company, en: emp.company };
+    const co = getCompanyMap()[emp.company] || { th: emp.company, en: emp.company };
     const tmpl = storedTmpl ? CATEGORY_CONFIG[storedTmpl.category] || TEMPLATES['without-salary'] : TEMPLATES[curTemplate];
     const curRmkId = $('cb-rmk-select')?.value;
     const rmk = remarks.find(r => r.id === curRmkId);
@@ -1360,7 +1289,7 @@ export async function initCertificateBuilder(container) {
         const rmkText = $('cb-rmk-text')?.textContent || '';
         const curMgr = managers.find(x => String(x.id) === String(curMgrId));
         const mgrName = tmplIsEn ? (curMgr?.full_name_en || curMgr?.full_name || '') : (curMgr?.full_name || $('cb-mgr-name')?.textContent || '');
-        const mgrPos = $('cb-mgr-pos')?.textContent || '';
+        const mgrPos = tmplIsEn ? (curMgr?.position_en || curMgr?.position || '') : ($('cb-mgr-pos')?.textContent || '');
         const issueDate = $('cb-issue-date')?.textContent || todayThaiLong();
         const officer = resolveOfficerContact(container, staff, curOffId);
         const offName = officer.name;
@@ -1416,7 +1345,7 @@ export async function initCertificateBuilder(container) {
           abroad_end_date_en: formatEnglishDateFull(abroadEnd) || '______________',
         };
 
-        const filled = fillTemplatePlaceholders(storedTmpl.content, reps);
+        const filled = fillPlaceholders(storedTmpl.content, reps);
         const { styles, bodyContent } = parseTemplateHtml(filled);
         ensureTemplateStyleEl().textContent = styles;
         bodyEl.dataset.origHtml = savedBody;
@@ -1786,8 +1715,8 @@ export async function initCertificateBuilder(container) {
     const docId    = $('cb-docid-text')?.textContent || peekCertNumber(curStoredForPrint ? isEnglishTemplate(curStoredForPrint) : false);
     const rmkText  = $('cb-rmk-text')?.textContent || '';
     const curMgr   = managers.find(x => String(x.id) === String(curMgrId));
-    const mgrName  = isThai() ? ($('cb-mgr-name')?.textContent || '') : (curMgr?.full_name_en || curMgr?.full_name || '');
-    const mgrPos   = $('cb-mgr-pos')?.textContent  || '';
+    const mgrName  = curStoredForPrint && isEnglishTemplate(curStoredForPrint) ? (curMgr?.full_name_en || curMgr?.full_name || '') : ($('cb-mgr-name')?.textContent || '');
+    const mgrPos   = curStoredForPrint && isEnglishTemplate(curStoredForPrint) ? (curMgr?.position_en || curMgr?.position || '') : ($('cb-mgr-pos')?.textContent || '');
     const mgrPhone = curMgr?.phone || '';
     const issueDate= $('cb-issue-date')?.textContent || todayThaiLong();
     const officer  = resolveOfficerContact(container, staff, curOffId);
@@ -1801,7 +1730,7 @@ export async function initCertificateBuilder(container) {
     const tmplIsEn = isEnglishTemplate(storedTmpl);
     const th       = isThai();
     const emp      = mockEmployee();
-    const co       = COMPANY_MAP[emp.company] || { th: emp.company, en: emp.company };
+    const co       = getCompanyMap()[emp.company] || { th: emp.company, en: emp.company };
     const coInfo   = resolveCompanyAddress(emp, th);
 
     // Try to use template content from storage
@@ -1849,8 +1778,8 @@ export async function initCertificateBuilder(container) {
         abroad_start_date_en: formatEnglishDateFull(abroadStart) || '______________',
         abroad_end_date_en: formatEnglishDateFull(abroadEnd) || '______________',
       };
-      let rendered = fillTemplatePlaceholders(storedTmpl.content, variables);
-      rendered = finalizeCertificateOutputHtml(rendered, { offName, sigSrc });
+      let rendered = fillPlaceholders(storedTmpl.content, variables);
+      rendered = finalizeCertificateHtml(rendered, { offName, sigSrc });
       if (!openCertificatePrintWindow(rendered)) {
         toast('กรุณาอนุญาต Pop-up เพื่อพิมพ์ PDF', 'error');
         return;

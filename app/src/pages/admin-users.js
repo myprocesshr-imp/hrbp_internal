@@ -158,44 +158,70 @@ export function renderAdminUsers() {
     <!-- Edit User Modal -->
     <div id="edit-user-modal" class="fixed inset-0 z-[100] flex items-center justify-center p-4 hidden">
       <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" id="edit-modal-backdrop"></div>
-      <div class="relative bg-surface-container-lowest rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-fade-in">
+      <div class="relative bg-surface-container-lowest rounded-2xl shadow-2xl w-full max-w-md mx-4 my-4 overflow-y-auto max-h-[calc(100vh-2rem)] animate-fade-in">
         <div class="h-1.5 bg-primary w-full"></div>
-        <div class="flex items-center justify-between px-6 pt-5 pb-3">
+        <div class="flex items-center justify-between px-6 pt-4 pb-2">
           <h3 class="text-title-md font-bold text-on-surface">${t('users.editModalTitle')}</h3>
           <button id="edit-modal-close" class="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-surface-container-high text-outline transition-colors">
             <span class="material-symbols-outlined text-[20px]">close</span>
           </button>
         </div>
-        <form id="edit-user-form" class="p-6 space-y-4">
+        <form id="edit-user-form" class="p-5 space-y-3">
           <input type="hidden" id="edit-user-id" />
           <div>
             <label class="block text-label-sm font-semibold text-on-surface-variant mb-1">${t('users.editNameLabel')}</label>
-            <input type="text" id="edit-user-name" readonly class="w-full bg-surface-container border border-outline-variant rounded-xl px-4 py-2.5 text-body-md text-on-surface outline-none" />
+            <input type="text" id="edit-user-name" readonly class="w-full bg-surface-container border border-outline-variant rounded-xl px-4 py-1.5 text-body-md text-on-surface outline-none" />
           </div>
           <div>
-            <label class="block text-label-sm font-semibold text-on-surface-variant mb-1">${t('users.editRoleLabel')}</label>
-            <select id="edit-user-role" class="w-full bg-white border border-outline-variant rounded-xl px-4 py-2.5 text-body-md text-on-surface focus:border-primary outline-none">
-              <option value="employee">${t('users.editRoleEmp')}</option>
-              <option value="hrbp">${t('users.editRoleHrbp')}</option>
-              <option value="hrmanager">HR Manager</option>
-              <option value="admin">${t('users.editRoleAdmin')}</option>
-            </select>
+            <label class="block text-label-sm font-semibold text-on-surface-variant mb-1">${t('login.englishNameLabel')}</label>
+            <input type="text" id="edit-user-english-name" readonly class="w-full bg-surface-container border border-outline-variant rounded-xl px-4 py-1.5 text-body-md text-on-surface outline-none" />
           </div>
           <div>
-            <label class="block text-label-sm font-semibold text-on-surface-variant mb-1">${t('users.editStatusLabel')}</label>
-            <select id="edit-user-status" class="w-full bg-white border border-outline-variant rounded-xl px-4 py-2.5 text-body-md text-on-surface focus:border-primary outline-none">
-              <option value="active">${t('users.editStatusActive')}</option>
-              <option value="inactive">${t('users.editStatusInactive')}</option>
-            </select>
+            <label class="block text-label-sm font-semibold text-on-surface-variant mb-1">${t('login.emailLabel')}</label>
+            <input type="text" id="edit-user-email" readonly class="w-full bg-surface-container border border-outline-variant rounded-xl px-4 py-1.5 text-body-md text-on-surface outline-none" />
+          </div>
+          <div>
+            <label class="block text-label-sm font-semibold text-on-surface-variant mb-2">${t('users.editRoleLabel')}</label>
+            <div class="flex flex-wrap gap-1.5" id="edit-user-role-group">
+              <label class="role-btn flex-1 min-w-0 px-2 py-1.5 rounded-lg border-2 border-outline-variant text-center cursor-pointer transition-all has-[:checked]:border-transparent has-[:checked]:text-white font-bold text-[11px] leading-tight has-[:checked]:bg-gray-600" data-role="employee">
+                <input type="radio" name="edit-role" value="employee" class="hidden" />
+                <span>Employee</span>
+              </label>
+              <label class="role-btn flex-1 min-w-0 px-2 py-1.5 rounded-lg border-2 border-outline-variant text-center cursor-pointer transition-all has-[:checked]:border-transparent has-[:checked]:text-white font-bold text-[11px] leading-tight has-[:checked]:bg-purple-600" data-role="hrbp">
+                <input type="radio" name="edit-role" value="hrbp" class="hidden" />
+                <span>HRBP</span>
+              </label>
+              <label class="role-btn flex-1 min-w-0 px-2 py-1.5 rounded-lg border-2 border-outline-variant text-center cursor-pointer transition-all has-[:checked]:border-transparent has-[:checked]:text-white font-bold text-[11px] leading-tight has-[:checked]:bg-indigo-600" data-role="hrmanager">
+                <input type="radio" name="edit-role" value="hrmanager" class="hidden" />
+                <span>HR Manager</span>
+              </label>
+              <label class="role-btn flex-1 min-w-0 px-2 py-1.5 rounded-lg border-2 border-outline-variant text-center cursor-pointer transition-all has-[:checked]:border-transparent has-[:checked]:text-white font-bold text-[11px] leading-tight has-[:checked]:bg-blue-600" data-role="admin">
+                <input type="radio" name="edit-role" value="admin" class="hidden" />
+                <span>Admin</span>
+              </label>
+            </div>
+          </div>
+          <div>
+            <label class="block text-label-sm font-semibold text-on-surface-variant mb-2">${t('users.editStatusLabel')}</label>
+            <div class="flex gap-2" id="edit-user-status-group">
+              <label class="status-btn flex-1 px-3 py-2 rounded-xl border-2 border-outline-variant text-center cursor-pointer transition-all has-[:checked]:border-[#16a34a] has-[:checked]:bg-[#f0fdf4] has-[:checked]:text-[#166534] font-bold text-label-sm">
+                <input type="radio" name="edit-status" value="active" class="hidden" />
+                <span class="flex items-center justify-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#16a34a]"></span>Active</span>
+              </label>
+              <label class="status-btn flex-1 px-3 py-2 rounded-xl border-2 border-outline-variant text-center cursor-pointer transition-all has-[:checked]:border-[#d93025] has-[:checked]:bg-[#fce8e6] has-[:checked]:text-[#b3261e] font-bold text-label-sm">
+                <input type="radio" name="edit-status" value="inactive" class="hidden" />
+                <span class="flex items-center justify-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#d93025]"></span>Inactive</span>
+              </label>
+            </div>
           </div>
           <div>
             <label class="block text-label-sm font-semibold text-on-surface-variant mb-2">${t('users.editBuLabel')}</label>
-            <div id="edit-user-bu-container" class="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-40 overflow-y-auto p-3 border border-outline-variant bg-surface-container-lowest rounded-xl">
+            <div id="edit-user-bu-container" class="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-32 overflow-y-auto p-2 border border-outline-variant bg-surface-container-lowest rounded-xl">
               <p class="text-label-sm text-outline col-span-full">${t('users.buLoading')}</p>
             </div>
-            <p class="text-[11px] text-outline mt-1">${t('users.editBuHint')}</p>
+            <p class="text-[10px] text-outline mt-1">${t('users.editBuHint')}</p>
           </div>
-          <div class="flex gap-3 pt-4">
+          <div class="flex gap-3 pt-2">
             <button type="button" id="edit-modal-cancel" class="flex-1 py-3 border border-outline-variant text-on-surface-variant hover:bg-surface-container rounded-xl font-bold transition-all">${t('common.cancel')}</button>
             <button type="submit" id="edit-save-btn" class="flex-1 py-3 bg-primary text-on-primary hover:opacity-90 rounded-xl font-bold transition-all shadow-md flex items-center justify-center gap-2"><span class="btn-text">${t('common.save')}</span><span class="material-symbols-outlined btn-icon text-[18px]">save</span></button>
           </div>
@@ -225,8 +251,9 @@ export async function initAdminUsers(container) {
   const editForm = container.querySelector('#edit-user-form');
   const editUserId = container.querySelector('#edit-user-id');
   const editUserName = container.querySelector('#edit-user-name');
-  const editUserRole = container.querySelector('#edit-user-role');
-  const editUserStatus = container.querySelector('#edit-user-status');
+  const editUserEmail = container.querySelector('#edit-user-email');
+  const editUserRole = () => container.querySelector('input[name="edit-role"]:checked')?.value || 'employee';
+  const editUserStatus = () => container.querySelector('input[name="edit-status"]:checked')?.value || 'active';
   const buContainer = container.querySelector('#edit-user-bu-container');
   const editCancel = container.querySelector('#edit-modal-cancel');
   const editClose = container.querySelector('#edit-modal-close');
@@ -298,6 +325,15 @@ export async function initAdminUsers(container) {
     if (!editModal) return;
     editUserId.value = user.id;
     editUserName.value = user.full_name || user.username || '-';
+    const engNameEl = container.querySelector('#edit-user-english-name');
+    if (engNameEl) engNameEl.value = user.full_name_en || [user.fname_e, user.lname_e].filter(Boolean).join(' ') || '-';
+    if (editUserEmail) editUserEmail.value = user.email || '-';
+    // Set role radio
+    const roleRadio = container.querySelector(`input[name="edit-role"][value="${user.role || 'employee'}"]`);
+    if (roleRadio) roleRadio.checked = true;
+    // Set status radio
+    const statusRadio = container.querySelector(`input[name="edit-status"][value="${user.status || 'active'}"]`);
+    if (statusRadio) statusRadio.checked = true;
     editUserRole.value = user.role || 'employee';
     if (editUserStatus) editUserStatus.value = user.status || 'active';
     const userBUs = Array.isArray(user.responsible_bu) ? user.responsible_bu : [];
@@ -329,8 +365,8 @@ export async function initAdminUsers(container) {
   editForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const userId = parseInt(editUserId.value, 10);
-    const updatedRole = editUserRole.value;
-    const updatedStatus = editUserStatus?.value || 'active';
+    const updatedRole = editUserRole();
+    const updatedStatus = editUserStatus();
     const selectedBUs = [];
     if (buContainer) {
       buContainer.querySelectorAll('input[name="bu_checkbox"]:checked').forEach(cb => selectedBUs.push(cb.value));
@@ -376,7 +412,7 @@ export async function initAdminUsers(container) {
               ${renderUserAvatar(user)}
               <div>
                 <p class="text-label-md font-bold text-on-surface">${user.full_name || user.username || '-'}</p>
-                <p class="text-label-sm text-on-surface-variant">${user.email || '-'}</p>
+                <p class="text-label-sm text-on-surface-variant">${user.full_name_en || [user.fname_e, user.lname_e].filter(Boolean).join(' ') || ''}</p>
               </div>
             </div>
           </td>

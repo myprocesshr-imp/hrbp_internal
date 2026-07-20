@@ -16,18 +16,18 @@ export async function onRequest(context) {
 
   // POST /api/templates - create template
   if (method === 'POST') {
-    const { id, name, category, content, status, version, updated_by } = await request.json();
+    const { id, name, category, content, status, version, updated_by, language } = await request.json();
     if (!id || !name || !category) {
       return json({ error: 'ID, Name, and Category are required' }, 400);
     }
 
     try {
       await env.DB.prepare(
-        `INSERT INTO templates (id, name, category, content, status, version, updated_at, updated_by)
-         VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?)`
+        `INSERT INTO templates (id, name, category, content, status, version, updated_at, updated_by, language)
+         VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?, ?)`
       ).bind(
         id, name, category, content || '', status || 'draft',
-        version || 'V 1.0', updated_by || 'System'
+        version || 'V 1.0', updated_by || 'System', language || 'th'
       ).run();
 
       const tmpl = await env.DB.prepare('SELECT * FROM templates WHERE id = ?').bind(id).first();
@@ -43,7 +43,7 @@ export async function onRequest(context) {
   // PUT /api/templates/:id - update template
   if (method === 'PUT') {
     const id = url.pathname.split('/').pop();
-    const { name, category, content, status, version, updated_by } = await request.json();
+    const { name, category, content, status, version, updated_by, language } = await request.json();
     if (!name || !category) {
       return json({ error: 'Name and Category are required' }, 400);
     }
@@ -51,11 +51,11 @@ export async function onRequest(context) {
     try {
       await env.DB.prepare(
         `UPDATE templates 
-         SET name = ?, category = ?, content = ?, status = ?, version = ?, updated_at = datetime('now'), updated_by = ? 
+         SET name = ?, category = ?, content = ?, status = ?, version = ?, language = ?, updated_at = datetime('now'), updated_by = ? 
          WHERE id = ?`
       ).bind(
         name, category, content || '', status || 'draft',
-        version || 'V 1.0', updated_by || 'System', id
+        version || 'V 1.0', language || 'th', updated_by || 'System', id
       ).run();
 
       const tmpl = await env.DB.prepare('SELECT * FROM templates WHERE id = ?').bind(id).first();

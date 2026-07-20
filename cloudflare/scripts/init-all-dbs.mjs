@@ -29,6 +29,7 @@ const MIGRATION_FILES = [
   'migrations/008_sync_dev_users.sql',
   'migrations/009_pickup_cert_master.sql',
   'migrations/010_signature_url.sql',
+  'migrations/012_add_template_language.sql',
 ];
 
 if (!fs.existsSync(D1_DIR)) {
@@ -105,6 +106,13 @@ function runMigration(db, name, sql) {
   if (name.includes('010_signature_url')) {
     if (hasColumn(db, 'users', 'signature_url')) {
       return 'skipped (signature_url column already exists)';
+    }
+  }
+
+  // For 012: check if language column already exists in templates
+  if (name.includes('012_add_template_language')) {
+    if (hasColumn(db, 'templates', 'language')) {
+      return 'skipped (language column already exists)';
     }
   }
 

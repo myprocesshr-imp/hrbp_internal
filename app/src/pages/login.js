@@ -11,7 +11,7 @@ import { buildEnglishName, getSexLabel, mapHrmsProfileFields } from '../lib/hrms
 
 function isProductionHost() {
   const host = window.location.hostname;
-  return host === 'hrbp-system.pages.dev' || host.endsWith('.hrbp-system.pages.dev');
+  return host === 'hrbp-internal.pages.dev' || host.endsWith('.hrbp-internal.pages.dev');
 }
 
 export function renderLoginPage() {

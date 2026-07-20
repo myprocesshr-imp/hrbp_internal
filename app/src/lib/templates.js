@@ -14,73 +14,10 @@ import {
   isEnglishTemplate,
   todayEnglishFull,
 } from './hrms-helper.js';
+import { fillPlaceholders, signatureImgHtml, finalizeCertificateHtml } from './cert-renderer.js';
+import { enrichCertWithCompanyAddress } from './company-address.js';
 
-const MOCK_DB_KEY_CERT_MASTER = 'hrbp_cert_master_data';
 const CERT_COUNTER_KEY = 'hrbp_cert_counter';
-
-const COMPANY_MAP = {
-  'Mango': { th: 'บริษัท แมงโก้ จำกัด', en: 'Mango Company Limited' },
-  'Corporate': { th: 'บริษัท คอร์ปอเรท คลาริตี้ จำกัด', en: 'Corporate Clarity Company Limited' },
-  'HRBP Group': { th: 'บริษัท เอชอาร์บีพี กรุ๊ป จำกัด', en: 'HRBP Group Company Limited' },
-};
-
-function findMasterCompany(companies, companyName) {
-  if (!companyName || !companies?.length) return null;
-  const q = companyName.trim().toLowerCase();
-  return companies.find(c => {
-    const th = (c.name || '').toLowerCase();
-    const en = (c.name_en || '').toLowerCase();
-    return (th && (q.includes(th) || th.includes(q))) || (en && (q.includes(en) || en.includes(q)));
-  }) || null;
-}
-
-async function loadCertMasterData() {
-  try {
-    const res = await getCertMasterData();
-    if (res?.data && (res.data.companies || res.data.addresses)) return res.data;
-  } catch (_) {}
-  try {
-    return JSON.parse(localStorage.getItem(MOCK_DB_KEY_CERT_MASTER) || '{}');
-  } catch (_) {
-    return {};
-  }
-}
-
-async function enrichCertDataWithMasterData(data) {
-  if (!data) return data;
-  const compName = data.company_name || '';
-  const mapped = COMPANY_MAP[compName];
-  let coNameTh = mapped?.th || compName;
-  let coNameEn = mapped?.en || data.company_name_en || compName;
-  let caTh = data.company_address || '';
-  let caEn = data.company_address_en || '';
-
-  const md = await loadCertMasterData();
-  const searchNames = [compName, mapped?.th, mapped?.en].filter(Boolean);
-  let foundCo = null;
-  for (const name of searchNames) {
-    foundCo = findMasterCompany(md.companies, name);
-    if (foundCo) break;
-  }
-
-  if (foundCo) {
-    if (foundCo.name) coNameTh = foundCo.name;
-    if (foundCo.name_en) coNameEn = foundCo.name_en;
-    const addr = md.addresses?.find(a => a.company_id === foundCo.id);
-    if (addr) {
-      caTh = addr.address || '';
-      caEn = addr.address_en || addr.address || '';
-    }
-  }
-
-  return {
-    ...data,
-    company_name: coNameTh,
-    company_name_en: coNameEn,
-    company_address: caTh,
-    company_address_en: caEn,
-  };
-}
 
 export function getBuddhistCertYear() {
   return new Date().getFullYear() + 543;
@@ -230,28 +167,6 @@ async function getTemplateHtml(doc_type, language) {
   return rec?.content || null;
 }
 
-function parseTemplatePlaceholders(html, variables) {
-  let rendered = html;
-  Object.keys(variables).forEach(key => {
-    const regex = new RegExp(`{{${key}}}`, 'g');
-    rendered = rendered.replace(regex, variables[key] !== undefined ? variables[key] : '');
-  });
-  return rendered;
-}
-
-function escapeHtmlAttr(val) {
-  return String(val ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;');
-}
-
-function signatureImgHtml(sigSrc, alt = 'Signature') {
-  if (!sigSrc) return '';
-  const safeSrc = String(sigSrc).replace(/"/g, '&quot;');
-  return `<img src="${safeSrc}" alt="${escapeHtmlAttr(alt)}" style="max-height:100%;max-width:100%;object-fit:contain;" />`;
-}
-
 function resolveSignerSignature(signerName) {
   if (!signerName) return '';
   // Convert an R2 storage key (e.g. "signatures/abc.png") to a proper API URL.
@@ -329,82 +244,10 @@ const CERT_FINAL_OUTPUT_CSS = `<style id="cb-final-output">
 
 /**
  * Strip builder edit chrome (blue dashed fields, selects) for print / employee download.
+ * Re-exported from the unified cert-renderer module.
  */
-export function finalizeCertificateOutputHtml(html, { offName = '', sigSrc = '' } = {}) {
-  let out = html;
-  const safeName = escapeHtmlAttr(offName);
-
-  out = out.replace(
-    /<select[^>]*\bid="cb-off-select"[^>]*>[\s\S]*?<\/select>/gi,
-    `<span class="cb-off-print-name" style="font-weight:700;color:#1a1a1a;">${safeName}</span>`
-  );
-  out = out.replace(
-    /<select[^>]*\bid="cb-outer-off-select"[^>]*>[\s\S]*?<\/select>/gi,
-    `<span class="cb-off-print-name" style="font-weight:700;color:#1a1a1a;">${safeName}</span>`
-  );
-  out = out.replace(/<select[^>]*\bid="cb-mgr-select"[^>]*>[\s\S]*?<\/select>/gi, '');
-  out = out.replace(/<select[^>]*\bid="cb-rmk-select"[^>]*>[\s\S]*?<\/select>/gi, '');
-  out = out.replace(/<select[^>]*\bid="cb-header-hr-select"[^>]*>[\s\S]*?<\/select>/gi, '');
-
-  if (sigSrc) {
-    const sigHtml = signatureImgHtml(sigSrc);
-    out = out.replace(
-      /(<div[^>]*\bid="cb-sig-box"[^>]*>)([\s\S]*?)(<\/div>)/i,
-      `$1${sigHtml}$3`
-    );
-  }
-
-  out = out.replace(/\scontenteditable="true"/gi, '');
-  out = out.replace(/\stitle="[^"]*(?:คลิก|Click|เลือก|Select|แก้ไข|edit)[^"]*"/gi, '');
-
-  const editIds = 'cb-rmk-text|cb-issue-date|cb-mgr-display|cb-header-hr-phone|cb-emp-salary|cb-mgr-name';
-  out = out.replace(
-    new RegExp(`(<[a-z][a-z0-9]*[^>]*\\bid="(?:${editIds})"[^>]*)\\sstyle="[^"]*"`, 'gi'),
-    '$1'
-  );
-
-  out = out.replace(
-    /<div[^>]*\bid="cb-mgr-display"[^>]*>([\s\S]*?)<\/div>/gi,
-    (_match, inner) => {
-      const nameMatch = inner.match(/id="cb-mgr-name"[^>]*>([\s\S]*?)<\//i);
-      const name = nameMatch ? nameMatch[1].trim() : inner.replace(/<[^>]+>/g, '').replace(/[()&nbsp;\s]/g, ' ').trim();
-      return `<div style="font-size:16pt;font-weight:700;color:#1a1a1a;">(&nbsp;${name}&nbsp;)</div>`;
-    }
-  );
-
-  out = out.replace(
-    /<input[^>]*\bid="cb-emp-salary"[^>]*value="([^"]*)"[^>]*\/?>/gi,
-    '<span style="font-weight:700;color:#1a1a1a;">$1</span>'
-  );
-
-  out = out.replace(/style="([^"]*)"/gi, (match, styles) => {
-    if (!/1a73e8|dashed|e8f0fe/i.test(styles)) return match;
-    let cleaned = styles
-      .replace(/border[^;]*dashed[^;]*;?/gi, '')
-      .replace(/border-bottom[^;]*;?/gi, '')
-      .replace(/color\s*:\s*#?1a73e8[^;]*;?/gi, 'color:#1a1a1a;')
-      .replace(/background(?:-color)?\s*:\s*#?e8f0fe[^;]*;?/gi, 'background:transparent;')
-      .replace(/cursor\s*:\s*(?:pointer|text)[^;]*;?/gi, '')
-      .replace(/outline[^;]*;?/gi, '')
-      .replace(/;\s*;/g, ';')
-      .trim();
-    if (cleaned.endsWith(';')) cleaned = cleaned.slice(0, -1);
-    return cleaned ? `style="${cleaned}"` : '';
-  });
-
-  const injectStyles = `${CERT_PRINT_SINGLE_PAGE_CSS}${CERT_FINAL_OUTPUT_CSS}`;
-  if (!out.includes('cb-final-output')) {
-    if (/<\/head>/i.test(out)) {
-      out = out.replace(/<\/head>/i, `${injectStyles}</head>`);
-    } else if (/<body[^>]*>/i.test(out)) {
-      out = out.replace(/<body([^>]*)>/i, `<body$1>${injectStyles}`);
-    } else {
-      out = injectStyles + out;
-    }
-  }
-
-  return out;
-}
+// backward-compat alias — new code should import from './cert-renderer.js' directly
+export { finalizeCertificateHtml as finalizeCertificateOutputHtml } from './cert-renderer.js';
 
 function buildCertVariables(data, templateRecord = null) {
   const useEnglish = isEnglishTemplate(templateRecord) || data.language === 'en';
@@ -451,7 +294,7 @@ function buildCertVariables(data, templateRecord = null) {
 }
 
 export async function generateCertificateHTML(data) {
-  const enriched = await enrichCertDataWithMasterData(data);
+  const enriched = await enrichCertWithCompanyAddress(data, getCertMasterData);
   const templateRecord = await getTemplateRecord(enriched.doc_type, enriched.language);
   const templateHtml = templateRecord?.content;
   if (!templateHtml) {
@@ -459,8 +302,8 @@ export async function generateCertificateHTML(data) {
   }
 
   const variables = buildCertVariables(enriched, templateRecord);
-  let html = parseTemplatePlaceholders(templateHtml, variables);
-  html = finalizeCertificateOutputHtml(html, {
+  let html = fillPlaceholders(templateHtml, variables);
+  html = finalizeCertificateHtml(html, {
     offName: variables.hr_officer_name,
     sigSrc: resolveSignerSignature(enriched.hr_signer_name),
   });
@@ -830,7 +673,7 @@ export async function previewCertificate(data, doPrint = false) {
  * Editable fields (blue dashed underline) disappear cleanly on print.
  */
 export async function generateEditableCertificateHTML(data) {
-  const enriched = await enrichCertDataWithMasterData(data);
+  const enriched = await enrichCertWithCompanyAddress(data, getCertMasterData);
   const templateRecord = await getTemplateRecord(enriched.doc_type, enriched.language);
   const templateHtml = templateRecord?.content;
   if (!templateHtml) {
@@ -892,7 +735,7 @@ export async function generateEditableCertificateHTML(data) {
   html = html.replace('{{hr_signer_name}}', `<input class="editable-input" name="hr_signer_name" value="${hr_signer_name.replace(/"/g,'&quot;')}" placeholder="ชื่อผู้ลงนาม" style="min-width:260px;" />`);
   html = html.replace('{{hr_signer_position}}', `<input class="editable-input" name="hr_signer_position" value="${hr_signer_position.replace(/"/g,'&quot;')}" placeholder="ตำแหน่งผู้ลงนาม" style="min-width:240px;font-weight:400;" />`);
 
-  return parseTemplatePlaceholders(html, buildCertVariables(enriched, templateRecord));
+  return fillPlaceholders(html, buildCertVariables(enriched, templateRecord));
 }
 
 /**

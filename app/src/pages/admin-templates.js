@@ -275,14 +275,14 @@ function buildVisaAbroadEN() {
 
 async function patchWorkCertTemplates(existing) {
   const patches = [
-    { id: 'tpl-work-th', content: buildWorkCertTH(), version: 'V 1.8' },
-    { id: 'tpl-work-en', content: buildWorkCertEN(), version: 'V 2.1' },
-    { id: 'tpl-visa-abroad', content: buildVisaAbroadEN(), version: 'V 2.1' },
+    { id: 'tpl-work-th', content: buildWorkCertTH(), version: 'V 1.8', language: 'th' },
+    { id: 'tpl-work-en', content: buildWorkCertEN(), version: 'V 2.1', language: 'en' },
+    { id: 'tpl-visa-abroad', content: buildVisaAbroadEN(), version: 'V 2.1', language: 'en' },
   ];
   for (const patch of patches) {
     const tmpl = existing.find(t => t.id === patch.id);
     if (tmpl) {
-      await updateTemplate(patch.id, { ...tmpl, content: patch.content, version: patch.version });
+      await updateTemplate(patch.id, { ...tmpl, content: patch.content, version: patch.version, language: patch.language });
     }
   }
 }
@@ -299,9 +299,9 @@ export async function seedTemplates() {
       
       const now = new Date();
       const defaultTemplates = [
-        { id: 'tpl-work-th', name: 'หนังสือรับรองการทำงาน (Thai)', version: 'V 1.1', category: 'หนังสือรับรองการทำงาน', status: 'published', statusLabel: t('status.published'), updatedAt: now.toISOString(), updatedBy: SYSTEM_UPDATED_BY, updated_by: SYSTEM_UPDATED_BY, icon: 'description', content: buildWorkCertTH() },
-        { id: 'tpl-work-en', name: 'หนังสือรับรองการทำงาน (Eng)', version: 'V 1.1', category: 'หนังสือรับรองการทำงาน', status: 'published', statusLabel: t('status.published'), updatedAt: now.toISOString(), updatedBy: SYSTEM_UPDATED_BY, updated_by: SYSTEM_UPDATED_BY, icon: 'description', content: buildWorkCertEN() },
-        { id: 'tpl-visa-abroad', name: 'หนังสือรับรองกรณีส่งพนักงานทำงานไปต่างประเทศ (Eng)', version: 'V 1.0', category: 'หนังสือรับรองเพื่อทำวีซ่า', status: 'published', statusLabel: t('status.published'), updatedAt: now.toISOString(), updatedBy: SYSTEM_UPDATED_BY, updated_by: SYSTEM_UPDATED_BY, icon: 'flight_takeoff', content: buildVisaAbroadEN() },
+        { id: 'tpl-work-th', name: 'หนังสือรับรองการทำงาน (Thai)', version: 'V 1.1', language: 'th', category: 'หนังสือรับรองการทำงาน', status: 'published', statusLabel: t('status.published'), updatedAt: now.toISOString(), updatedBy: SYSTEM_UPDATED_BY, updated_by: SYSTEM_UPDATED_BY, icon: 'description', content: buildWorkCertTH() },
+        { id: 'tpl-work-en', name: 'หนังสือรับรองการทำงาน (Eng)', version: 'V 1.1', language: 'en', category: 'หนังสือรับรองการทำงาน', status: 'published', statusLabel: t('status.published'), updatedAt: now.toISOString(), updatedBy: SYSTEM_UPDATED_BY, updated_by: SYSTEM_UPDATED_BY, icon: 'description', content: buildWorkCertEN() },
+        { id: 'tpl-visa-abroad', name: 'หนังสือรับรองกรณีส่งพนักงานทำงานไปต่างประเทศ (Eng)', version: 'V 1.0', language: 'en', category: 'หนังสือรับรองเพื่อทำวีซ่า', status: 'published', statusLabel: t('status.published'), updatedAt: now.toISOString(), updatedBy: SYSTEM_UPDATED_BY, updated_by: SYSTEM_UPDATED_BY, icon: 'flight_takeoff', content: buildVisaAbroadEN() },
       ];
       
       // Seed them
@@ -432,6 +432,7 @@ export function renderAdminTemplates() {
             <tr class="border-b border-outline-variant bg-surface-container-lowest">
               <th class="px-6 py-4 text-label-sm font-bold text-on-surface-variant font-display">${t('templates.tableName')}</th>
               <th class="px-6 py-4 text-label-sm font-bold text-on-surface-variant font-display">${t('templates.tableCategory')}</th>
+              <th class="px-6 py-4 text-label-sm font-bold text-on-surface-variant font-display">${t('templates.tableLanguage')}</th>
               <th class="px-6 py-4 text-label-sm font-bold text-on-surface-variant font-display">${t('templates.tableStatus')}</th>
               <th class="px-6 py-4 text-label-sm font-bold text-on-surface-variant font-display">${t('templates.tableUpdated')}</th>
               <th class="px-6 py-4 text-label-sm font-bold text-on-surface-variant font-display text-right">${t('templates.tableAction')}</th>
@@ -470,6 +471,14 @@ export function renderAdminTemplates() {
               <select id="field-category" class="w-full bg-white border border-outline-variant rounded-xl px-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-on-surface font-medium">
                 <option value="">${t('templates.categoryDefault')}</option>
                 ${CATEGORIES.map(c => `<option value="${c}">${c}</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label class="block text-label-md font-semibold text-on-surface-variant mb-2">${t('templates.tableLanguage')} <span class="text-error">*</span></label>
+              <select id="field-language" class="w-full bg-white border border-outline-variant rounded-xl px-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-on-surface font-medium">
+                <option value="th">${t('templates.langThai')}</option>
+                <option value="en">${t('templates.langEnglish')}</option>
+                <option value="both">${t('templates.langBoth')}</option>
               </select>
             </div>
             <div>
@@ -547,7 +556,7 @@ async function renderTemplateTable(container) {
   if (!tbody) return;
 
   if (!pageItems.length) {
-    tbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-on-surface-variant">${t('templates.emptyTitle')}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-on-surface-variant">${t('templates.emptyTitle')}</td></tr>`;
   } else {
     tbody.innerHTML = pageItems.map(tmpl => {
       let badgeClass = 'bg-surface-container-highest text-on-surface-variant';
@@ -569,6 +578,11 @@ async function renderTemplateTable(container) {
             </div>
           </td>
           <td class="px-6 py-4 text-label-md text-on-surface-variant">${tmpl.category}</td>
+          <td class="px-6 py-4">
+            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-surface-container-highest text-on-surface-variant">
+              ${tmpl.language === 'en' ? t('templates.langEnglish') : tmpl.language === 'both' ? t('templates.langBoth') : t('templates.langThai')}
+            </span>
+          </td>
           <td class="px-6 py-4">
             <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold ${badgeClass}">
               <span class="w-1.5 h-1.5 rounded-full ${dotClass}"></span>
@@ -849,6 +863,7 @@ export async function initAdminTemplates(container) {
     container.querySelector('#template-modal-title').textContent = t('templates.modalCreateTitle');
     container.querySelector('#field-name').value = '';
     container.querySelector('#field-category').value = '';
+    container.querySelector('#field-language').value = 'th';
     container.querySelector('#field-content').value = '';
     document.querySelector('input[name="template-status"][value="draft"]').checked = true;
     container.querySelector('#template-modal').classList.remove('hidden');
@@ -866,68 +881,77 @@ export async function initAdminTemplates(container) {
 
   // ── Save Template ──
   container.querySelector('#template-modal-save')?.addEventListener('click', async () => {
-    const editId = container.querySelector('#template-edit-id').value;
-    const name = container.querySelector('#field-name').value.trim();
-    const category = container.querySelector('#field-category').value;
-    const status = document.querySelector('input[name="template-status"]:checked')?.value || 'draft';
-    const content = container.querySelector('#field-content').value.trim();
+    try {
+      const editId = container.querySelector('#template-edit-id').value;
+      const name = container.querySelector('#field-name').value.trim();
+      const category = container.querySelector('#field-category').value;
+      const langEl = container.querySelector('#field-language');
+      const language = langEl ? langEl.value : 'th';
+      const status = document.querySelector('input[name="template-status"]:checked')?.value || 'draft';
+      const content = container.querySelector('#field-content').value.trim();
 
-    if (!name) { alert(t('templates.nameRequired')); return; }
-    if (!category) { alert(t('templates.categoryRequired')); return; }
+      if (!name) { alert(t('templates.nameRequired')); return; }
+      if (!category) { alert(t('templates.categoryRequired')); return; }
 
-    const templates = getTemplates();
-    const currentUser = JSON.parse(localStorage.getItem('hrbp_current_user') || '{}');
+      const templates = getTemplates();
+      const currentUser = JSON.parse(localStorage.getItem('hrbp_current_user') || '{}');
 
-    if (editId) {
-      // Edit existing
-      const idx = templates.findIndex(t => t.id === editId);
-      if (idx !== -1) {
-        const old = templates[idx];
-        const parts = (old.version || 'V 0').replace('V ', '').split('.');
-        const major = parseInt(parts[0]) || 0;
-        const minor = parseInt(parts[1]) || 0;
-        const newVersion = (name !== old.name || category !== old.category) ? `V ${major + 1}.0` : `V ${major}.${minor + 1}`;
-        const updatedTmpl = {
-          ...old,
+      if (editId) {
+        // Edit existing
+        const idx = templates.findIndex(t => t.id === editId);
+        if (idx !== -1) {
+          const old = templates[idx];
+          const parts = (old.version || 'V 0').replace('V ', '').split('.');
+          const major = parseInt(parts[0]) || 0;
+          const minor = parseInt(parts[1]) || 0;
+          const newVersion = (name !== old.name || category !== old.category) ? `V ${major + 1}.0` : `V ${major}.${minor + 1}`;
+          const updatedTmpl = {
+            ...old,
+            name,
+            category,
+            language,
+            status,
+            statusLabel: status === 'published' ? t('status.published') : status === 'disabled' ? t('status.disabled') : t('status.draft'),
+            version: newVersion,
+            content,
+            updatedAt: new Date().toISOString(),
+            updatedBy: currentUser.full_name || currentUser.email || 'HR',
+            updated_by: currentUser.full_name || currentUser.email || 'HR',
+            icon: CATEGORY_ICONS[category] || 'description',
+          };
+          await updateTemplate(editId, updatedTmpl);
+          addEdit(name);
+          showToast(t('templates.saveToast'));
+        }
+      } else {
+        // Create new
+        const maxVersion = templates.filter(t => t.name.includes(name.substring(0, 8))).length + 1;
+        const newTmpl = {
+          id: nextId(),
           name,
           category,
+          language,
           status,
           statusLabel: status === 'published' ? t('status.published') : status === 'disabled' ? t('status.disabled') : t('status.draft'),
-          version: newVersion,
+          version: `V 1.${maxVersion - 1}`,
           content,
           updatedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
           updatedBy: currentUser.full_name || currentUser.email || 'HR',
           updated_by: currentUser.full_name || currentUser.email || 'HR',
           icon: CATEGORY_ICONS[category] || 'description',
         };
-        await updateTemplate(editId, updatedTmpl);
+        await createTemplate(newTmpl);
         addEdit(name);
-        showToast(t('templates.saveToast'));
+        showToast(t('templates.createToast'));
       }
-    } else {
-      // Create new
-      const maxVersion = templates.filter(t => t.name.includes(name.substring(0, 8))).length + 1;
-      const newTmpl = {
-        id: nextId(),
-        name,
-        category,
-        status,
-        statusLabel: status === 'published' ? t('status.published') : status === 'disabled' ? t('status.disabled') : t('status.draft'),
-        version: `V 1.${maxVersion - 1}`,
-        content,
-        updatedAt: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-        updatedBy: currentUser.full_name || currentUser.email || 'HR',
-        updated_by: currentUser.full_name || currentUser.email || 'HR',
-        icon: CATEGORY_ICONS[category] || 'description',
-      };
-      await createTemplate(newTmpl);
-      addEdit(name);
-      showToast(t('templates.createToast'));
-    }
 
-    closeModal();
-    renderTemplateTable(container);
+      closeModal();
+      renderTemplateTable(container);
+    } catch (err) {
+      console.error('[Template Save Error]', err);
+      alert('เกิดข้อผิดพลาดในการบันทึก: ' + (err.message || ''));
+    }
   }, { signal });
 
   // ── Edit button (delegated) ──
@@ -943,6 +967,7 @@ export async function initAdminTemplates(container) {
     container.querySelector('#template-modal-title').textContent = t('templates.modalEditTitle');
     container.querySelector('#field-name').value = tmpl.name;
     container.querySelector('#field-category').value = tmpl.category;
+    container.querySelector('#field-language').value = tmpl.language || 'th';
     container.querySelector('#field-content').value = tmpl.content || '';
     const radio = container.querySelector(`input[name="template-status"][value="${tmpl.status}"]`);
     if (radio) radio.checked = true;

@@ -86,7 +86,7 @@ export function renderEmployeeLayout(contentHTML) {
       </aside>
 
       <!-- Main Content Area -->
-      <main id="main-content" class="flex-grow p-4 md:p-8 max-w-[1200px] mx-auto min-h-screen pt-8 pb-20 transition-all duration-300 ${isCollapsed ? 'md:ml-20' : 'md:ml-64'}">
+      <main id="main-content" class="flex-grow p-4 md:p-8 min-h-screen pt-8 pb-20 transition-all duration-300" style="width: ${isCollapsed ? 'calc(100% - 80px)' : 'calc(100% - 256px)'}; margin-left: ${isCollapsed ? '80px' : '256px'}; max-width: 1200px;">
         <div class="page-enter">
           ${contentHTML}
         </div>

@@ -1,7 +1,7 @@
 const Database = require('better-sqlite3');
 
 const D1_PATH = 'C:/Users/ACER/Desktop/Works/IMP/HR/HRBP/stitch_hrbp-internal/cloudflare/.wrangler/state/v3/d1/miniflare-D1DatabaseObject/02c8e6929a234bd3319d8c878b9a0e1e5f027aec6a691d53ee7d6aedd838066e.sqlite';
-const PROD_API = 'https://hrbp-system.pages.dev';
+const PROD_API = 'https://hrbp-internal.pages.dev';
 
 async function main() {
   console.log('Fetching cert-master-data from production API...');

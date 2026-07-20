@@ -108,8 +108,22 @@ export function formatPhoneInternational(phone) {
 }
 
 /** Detect published templates that render English certificates */
+/**
+ * Check if a template is English.
+ * Priority:
+ *   1. template.language field (explicit: 'en' → English, 'th' → Thai, 'both' → English)
+ *   2. Legacy heuristics (ID/name patterns) for backward compatibility
+ */
 export function isEnglishTemplate(tmpl) {
   if (!tmpl) return false;
+
+  // Explicit language field takes priority
+  const lang = (tmpl.language || '').toLowerCase();
+  if (lang === 'en') return true;
+  if (lang === 'th') return false;
+  // 'both' → prefers English for display purposes
+
+  // Legacy heuristic fallback (for templates without language field)
   const id = String(tmpl.id || '').toLowerCase();
   const name = String(tmpl.name || '');
   if (id.endsWith('-en') || id.includes('visa-abroad') || id.includes('-eng')) return true;

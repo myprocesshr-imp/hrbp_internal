@@ -79,7 +79,7 @@ export function renderAdminLayout(contentHTML) {
       </aside>
 
       <!-- Main Content Area -->
-      <main id="main-content" class="flex-grow p-4 md:p-8 w-full min-h-screen pt-8 pb-20 transition-all duration-300 ${isCollapsed ? 'md:ml-20' : 'md:ml-64'}">
+      <main id="main-content" class="flex-grow p-4 md:p-8 min-h-screen pt-8 pb-20 transition-all duration-300" style="width: ${isCollapsed ? 'calc(100% - 80px)' : 'calc(100% - 256px)'}; margin-left: ${isCollapsed ? '80px' : '256px'};">
         <div class="page-enter">
           ${contentHTML}
         </div>
@@ -242,8 +242,8 @@ export async function initAdminLayout(container) {
         // Collapse sidebar
         sidebar.classList.remove('w-64', 'px-4', 'pt-6');
         sidebar.classList.add('w-20', 'px-2', 'pt-4');
-        mainContent.classList.remove('md:ml-64');
-        mainContent.classList.add('md:ml-20');
+        mainContent.style.width = 'calc(100% - 80px)';
+        mainContent.style.marginLeft = '80px';
         // Hide text labels
         sidebar.querySelectorAll('.text-label-md, .text-label-sm').forEach(el => el.classList.add('hidden'));
         sidebar.querySelectorAll('#sidebar-brand span[class*="text-["]').forEach(el => el.classList.add('hidden'));
@@ -269,8 +269,8 @@ export async function initAdminLayout(container) {
         // Expand sidebar
         sidebar.classList.remove('w-20', 'px-2', 'pt-4');
         sidebar.classList.add('w-64', 'px-4', 'pt-6');
-        mainContent.classList.remove('md:ml-20');
-        mainContent.classList.add('md:ml-64');
+        mainContent.style.width = 'calc(100% - 256px)';
+        mainContent.style.marginLeft = '256px';
         // Show text labels
         sidebar.querySelectorAll('.text-label-md, .text-label-sm').forEach(el => el.classList.remove('hidden'));
         // Change icon to chevron_left

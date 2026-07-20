@@ -57,11 +57,11 @@ cd ../cloudflare
 npx wrangler pages deploy ../app/dist --branch main
 ```
 
-เมื่อ deploy เสร็จจะได้ URL เช่น `https://hrbp-system-xxx.pages.dev`
+เมื่อ deploy เสร็จจะได้ URL เช่น `https://hrbp-internal-xxx.pages.dev`
 
 ### 5. (Optional) ตั้งค่า Custom Domain
 
-ใน Cloudflare Dashboard → Pages → hrbp-system → Custom domains → เพิ่ม domain
+ใน Cloudflare Dashboard → Pages → hrbp-internal → Custom domains → เพิ่ม domain
 
 ## Testing Locally
 

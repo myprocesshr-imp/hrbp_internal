@@ -9,9 +9,12 @@ const ALLOWED_MIME = new Set([
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ]);
 
-export function isAllowedUploadOrigin(request) {
+export function isAllowedUploadOrigin(request, env = {}) {
   const origin = request.headers.get('Origin') || '';
   const referer = request.headers.get('Referer') || '';
+
+  // Allow an explicit custom domain to be configured per-environment.
+  const configured = (env.ALLOWED_UPLOAD_ORIGIN || '').toString().trim();
 
   const check = (value) => {
     if (!value) return false;
@@ -19,7 +22,11 @@ export function isAllowedUploadOrigin(request) {
       const { hostname, protocol } = new URL(value);
       if (protocol !== 'https:' && protocol !== 'http:') return false;
       if (hostname === 'localhost' || hostname === '127.0.0.1') return true;
-      return hostname === 'hrbp-system.pages.dev' || hostname.endsWith('.hrbp-system.pages.dev');
+      if (configured && hostname === configured) return true;
+      // Cloudflare managed domains (Pages + Workers) — safe to trust as first-party.
+      if (hostname === 'hrbp-internal.pages.dev' || hostname.endsWith('.hrbp-internal.pages.dev')) return true;
+      if (hostname.endsWith('.pages.dev') || hostname.endsWith('.workers.dev')) return true;
+      return false;
     } catch {
       return false;
     }
