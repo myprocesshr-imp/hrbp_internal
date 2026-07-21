@@ -5,9 +5,9 @@
 import { mockUsers, setCurrentUser } from '../mock-data.js';
 import { navigate } from '../router.js';
 import md5 from 'js-md5';
-import { login as apiLogin, register as apiRegister } from '../lib/api.js';
+import { login as apiLogin, register as apiRegister, updateUser } from '../lib/api.js';
 import { t } from '../lib/i18n.js';
-import { buildEnglishName, getSexLabel, mapHrmsProfileFields } from '../lib/hrms-helper.js';
+import { buildEnglishName, getSexLabel, mapHrmsProfileFields, enrichUserFromHrms, persistEnglishNameToMockUsers } from '../lib/hrms-helper.js';
 
 function isProductionHost() {
   const host = window.location.hostname;
@@ -340,9 +340,23 @@ export function initLoginPage(container) {
 
       if (authResult.user) {
         console.log('[login] 7a. User found, navigating');
-        setCurrentUser(authResult.user);
-        const target = ['admin', 'hrmanager', 'hrbp'].includes(authResult.user.role)
-          ? (authResult.user.role === 'hrbp' ? '/admin/requests' : '/admin/dashboard')
+        let user = authResult.user;
+        // Pull the real English name (fname_e/lname_e/sex_id) from HRMS for
+        // accounts that logged in before those fields existed.
+        try {
+          const enriched = await enrichUserFromHrms(user);
+          if (enriched) {
+            user = enriched;
+            setCurrentUser(enriched);
+            // Keep the shared staff store (Certificate Builder) in sync too.
+            try { persistEnglishNameToMockUsers(enriched); } catch (_) {}
+            // Best-effort persistence to the users table so it survives sessions.
+            try { await updateUser(user.id, { fname_e: enriched.fname_e, lname_e: enriched.lname_e, sex_id: enriched.sex_id }); } catch (_) {}
+          }
+        } catch (_) { /* keep the original user on enrichment failure */ }
+        setCurrentUser(user);
+        const target = ['admin', 'hrmanager', 'hrbp'].includes(user.role)
+          ? (user.role === 'hrbp' ? '/admin/requests' : '/admin/dashboard')
           : '/employee/requests';
         navigate(target);
       } else if (authResult.needsProvisioning) {

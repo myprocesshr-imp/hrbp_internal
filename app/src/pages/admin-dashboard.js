@@ -4,8 +4,8 @@
  */
 import { navigate } from '../router.js';
 import { getCurrentUser } from '../mock-data.js';
-import { getEmployeeRequests, updateRequest, cancelRequest } from '../lib/api.js';
-import { openEditableCertificate } from '../lib/templates.js';
+import { getEmployeeRequests, updateRequest, cancelRequest, getDeliveryMethods } from '../lib/api.js';
+import { openEditableCertificate, formatDateISO } from '../lib/templates.js';
 import { t } from '../lib/i18n.js';
 import { loadAvatarForElement } from '../lib/avatar-helper.js';
 import { dataService } from '../lib/data-service.js';
@@ -61,6 +61,11 @@ function getDashboardFilterStatus() {
   return v;
 }
 
+/** Check whether a request row has physical document delivery */
+function hasPhysicalDelivery(r) {
+  return (r.delivery_value || r.delivery || '').toLowerCase().includes('physical');
+}
+
 function filterDashboardPending(pending, filterStatus) {
   if (!filterStatus) return pending;
   if (filterStatus === 'submitted') {
@@ -70,6 +75,11 @@ function filterDashboardPending(pending, filterStatus) {
     const today = new Date();
     const todayLabel = `${today.getDate()} ${t('month.short')[today.getMonth()]} ${today.getFullYear() + 543}`;
     return pending.filter(r => (r.date || '').includes(todayLabel));
+  }
+  if (filterStatus === 'to-deliver') {
+    return pending.filter(r => r.status === 'approved'
+      && hasPhysicalDelivery(r)
+      && !r.physical_delivered);
   }
   return pending.filter(r => r.status === filterStatus && !isEmployeeCancelled(r));
 }
@@ -194,11 +204,15 @@ function computeDashboardData(data) {
   // status='rejected' but must be excluded so the "ปฏิเสธ" KPI isn't polluted.
   const rejected = requests.filter(r => r.status === 'rejected' && !isEmployeeCancelled(r));
   const cancelled = requests.filter(r => isEmployeeCancelled(r));
+  const toDeliver = requests.filter(r => r.status === 'approved'
+    && hasPhysicalDelivery(r)
+    && !r.physical_delivered);
 
   const kpis = [
     { label: `${t('dashboard.kpiAll')}`, value: String(requests.length), icon: 'description', trend: '', color: 'primary', filterValue: '' },
     { label: `${t('dashboard.kpiPending')}`, value: String(pendingReqs.length), icon: 'assignment_ind', sublabel: `${t('dashboard.subPending')}`, color: 'secondary', filterValue: 'submitted' },
     { label: `${t('dashboard.kpiApproved')}`, value: String(approved.length), icon: 'check_circle', sublabel: `${t('dashboard.subApproved')}`, color: 'success', filterValue: 'approved' },
+    { label: `${t('dashboard.kpiToDeliver')}`, value: String(toDeliver.length), icon: 'local_shipping', sublabel: `${t('dashboard.subToDeliver')}`, color: 'tertiary', filterValue: 'to-deliver' },
     { label: `${t('dashboard.kpiRejected')}`, value: String(rejected.length), icon: 'cancel', sublabel: '', color: 'error', filterValue: 'rejected' },
     { label: `${t('dashboard.kpiToday')}`, value: String(completedToday), icon: 'today', sublabel: `${t('dashboard.subToday')}`, color: 'primary', filterValue: 'today' },
   ];
@@ -355,6 +369,7 @@ function computeDashboardData(data) {
       hr_officer: hrOfficerName,
       acknowledged_by: r.acknowledged_by || raw.acknowledged_by || null,
       cert_ready: r.cert_ready || raw.cert_ready || false,
+      cert_number: raw.cert_number || '',
       cancelled_by_employee: isEmployeeCancelled(r),
       request_data: r.request_data || raw.request_data || {}
     };
@@ -395,7 +410,7 @@ export function renderAdminDashboard(data) {
     </div>
 
     <!-- KPIs Grid -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+    <div id="kpi-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-8">
       ${kpis.map(kpi => {
         let borderClass = 'border-outline-variant';
         let textClass = 'text-on-surface';
@@ -415,6 +430,12 @@ export function renderAdminDashboard(data) {
           iconColorClass = 'text-red-700';
           valueColor = 'text-red-700';
           subtextClass = 'text-red-700 font-bold';
+        } else if (kpi.color === 'tertiary') {
+          borderClass = 'border-amber-300';
+          iconBgClass = 'bg-amber-100';
+          iconColorClass = 'text-amber-700';
+          valueColor = 'text-amber-700';
+          subtextClass = 'text-amber-700 font-bold';
         }
 
         const isActive = filterStatus === kpi.filterValue;
@@ -446,6 +467,7 @@ export function renderAdminDashboard(data) {
           <thead class="bg-surface-container-low text-label-sm text-on-surface-variant font-bold border-b border-outline-variant">
             <tr>
               <th class="px-6 py-3">${t('dashboard.tableRequester')}</th>
+              <th class="px-6 py-3">${t('dashboard.tableDocNo')}</th>
               <th class="px-6 py-3">${t('dashboard.tableDept')}</th>
               <th class="px-6 py-3">${t('dashboard.tableType')}</th>
               <th class="px-6 py-3">${t('dashboard.tableStatus')}</th>
@@ -466,9 +488,15 @@ export function renderAdminDashboard(data) {
               else if (req.status === 'in-review' && req.eta_date) badgeClass = 'bg-[#dce1ff] text-primary font-bold';
               else if (req.status === 'approved') badgeClass = 'bg-[#dcfce7] text-[#166534] font-bold';
               else if (req.eta_date) badgeClass = 'bg-[#dce1ff] text-primary font-bold';
+              const isDelivered = req.status === 'approved'
+                && hasPhysicalDelivery(req)
+                && req.physical_delivered;
+              const needsDelivery = req.status === 'approved'
+                && hasPhysicalDelivery(req)
+                && !req.physical_delivered;
               
               return `
-                <tr class="hover:bg-surface-container-low transition-colors">
+                <tr class="hover:bg-surface-container-low transition-colors ${isDelivered ? 'bg-teal-50/50' : ''}">
                   <td class="px-6 py-4">
                     <div class="flex items-center gap-3 whitespace-nowrap">
                       ${renderRequesterAvatar(req)}
@@ -478,10 +506,13 @@ export function renderAdminDashboard(data) {
                       </div>
                     </div>
                   </td>
+                  <td class="px-6 py-4 text-label-sm text-on-surface-variant whitespace-nowrap">${req.cert_number || '-'}</td>
                   <td class="px-6 py-4 text-label-sm text-on-surface-variant whitespace-nowrap">${req.department}</td>
-                  <td class="px-6 py-4 text-label-md text-on-surface whitespace-nowrap">${req.type}</td>
-                  <td class="px-6 py-4 whitespace-nowrap">
-                    <span class="px-2.5 py-1 rounded-md text-[10px] whitespace-nowrap ${badgeClass}">${req.statusLabel}</span>
+                  <td class="px-6 py-4 text-label-md text-on-surface whitespace-normal break-words">${req.type}</td>
+                  <td class="px-6 py-4">
+                    <div class="flex flex-col gap-1 items-start">
+                    <span class="px-2.5 py-1 rounded-md text-[10px] whitespace-nowrap ${badgeClass}">${req.statusLabel}</span>${isDelivered ? `<span class="inline-flex items-center gap-0.5 px-2 py-0.5 bg-teal-100 text-teal-700 rounded text-[10px] font-bold"><span class="material-symbols-outlined text-[12px]">local_shipping</span>${t('status.delivered')}</span>` : ''}
+                    </div>
                   </td>
                   <td class="px-6 py-4 text-label-sm text-on-surface-variant whitespace-nowrap">${req.date}</td>
                   <td class="px-6 py-4 text-label-sm text-on-surface-variant whitespace-nowrap">${formatThaiDate(req.eta_date)}</td>
@@ -527,6 +558,12 @@ export function renderAdminDashboard(data) {
                           ${t('dashboard.actionCreateCert')}
                         </button>
                         ` : ''}
+                        ${req.status === 'approved' && hasPhysicalDelivery(req) && !req.physical_delivered ? `
+                        <button class="btn-deliver w-full flex items-center gap-3 px-4 py-3 text-label-md text-amber-800 hover:bg-amber-50 transition-colors text-left" data-req-id="${req.id}" data-req-name="${req.name}">
+                          <span class="material-symbols-outlined text-[18px] text-amber-600">local_shipping</span>
+                          ${t('dashboard.actionDeliver')}
+                        </button>
+                        ` : ''}
                         ${!isCancelledByEmp && req.status !== 'rejected' && req.status !== 'approved' && req.status !== 'cancelled' ? `
                         <hr class="border-t border-outline-variant mx-3">
                         <button class="btn-reject w-full flex items-center gap-3 px-4 py-3 text-label-md text-error hover:bg-error-container/20 transition-colors text-left" data-req-id="${req.id}" data-req-name="${req.name}">
@@ -540,7 +577,7 @@ export function renderAdminDashboard(data) {
                 </tr>
               `;
             }).join('') : `
-              <tr><td colspan="8" class="p-8 text-center text-on-surface-variant">${t('common.noResults')}</td></tr>
+              <tr><td colspan="9" class="p-8 text-center text-on-surface-variant">${t('common.noResults')}</td></tr>
             `}
           </tbody>
         </table>
@@ -681,86 +718,86 @@ export function renderAdminDashboard(data) {
         </div>
 
         <div class="px-6 pb-6 overflow-y-auto">
-          <div id="detail-modal-body" class="space-y-4">
+          <div id="detail-modal-body" class="space-y-3">
 
             <!-- Employee Info Section -->
             <p class="text-label-xs font-bold text-outline uppercase tracking-widest">ข้อมูลพนักงาน</p>
             <div class="grid grid-cols-2 gap-3">
-              <div class="bg-surface-container rounded-xl px-4 py-3 col-span-2">
-                <p class="text-label-xs text-outline">ชื่อ-นามสกุล</p>
-                <p class="text-label-md font-semibold text-on-surface" id="dt-emp-name">-</p>
+              <div class="bg-surface-container rounded-xl px-3 py-2 min-w-0 col-span-2">
+                <p class="text-label-xs text-outline m-0">ชื่อ-นามสกุล</p>
+                <p class="text-label-md font-semibold text-on-surface text-left break-words m-0 mt-0.5 leading-tight" id="dt-emp-name">-</p>
               </div>
-              <div class="bg-surface-container rounded-xl px-4 py-3">
-                <p class="text-label-xs text-outline">รหัสพนักงาน</p>
-                <p class="text-label-md font-semibold text-on-surface" id="dt-emp-id">-</p>
+              <div class="bg-surface-container rounded-xl px-3 py-2 min-w-0">
+                <p class="text-label-xs text-outline m-0">รหัสพนักงาน</p>
+                <p class="text-label-md font-semibold text-on-surface text-left break-words m-0 mt-0.5 leading-tight" id="dt-emp-id">-</p>
               </div>
-              <div class="bg-surface-container rounded-xl px-4 py-3">
-                <p class="text-label-xs text-outline">แผนก</p>
-                <p class="text-label-md font-semibold text-on-surface" id="dt-dept">-</p>
+              <div class="bg-surface-container rounded-xl px-3 py-2 min-w-0">
+                <p class="text-label-xs text-outline m-0">แผนก</p>
+                <p class="text-label-md font-semibold text-on-surface text-left break-words m-0 mt-0.5 leading-tight" id="dt-dept">-</p>
               </div>
-              <div class="bg-surface-container rounded-xl px-4 py-3">
-                <p class="text-label-xs text-outline">ตำแหน่ง</p>
-                <p class="text-label-md font-semibold text-on-surface" id="dt-position">-</p>
+              <div class="bg-surface-container rounded-xl px-3 py-2 min-w-0">
+                <p class="text-label-xs text-outline m-0">ตำแหน่ง</p>
+                <p class="text-label-md font-semibold text-on-surface text-left break-words m-0 mt-0.5 leading-tight" id="dt-position">-</p>
               </div>
-              <div class="bg-surface-container rounded-xl px-4 py-3">
-                <p class="text-label-xs text-outline">เบอร์โทรศัพท์</p>
-                <p class="text-label-md font-semibold text-on-surface" id="dt-phone">-</p>
+              <div class="bg-surface-container rounded-xl px-3 py-2 min-w-0">
+                <p class="text-label-xs text-outline m-0">เบอร์โทรศัพท์</p>
+                <p class="text-label-md font-semibold text-on-surface text-left break-words m-0 mt-0.5 leading-tight" id="dt-phone">-</p>
               </div>
-              <div class="bg-surface-container rounded-xl px-4 py-3">
-                <p class="text-label-xs text-outline">วันที่เริ่มงาน</p>
-                <p class="text-label-md font-semibold text-on-surface" id="dt-start-date">-</p>
+              <div class="bg-surface-container rounded-xl px-3 py-2 min-w-0">
+                <p class="text-label-xs text-outline m-0">วันที่เริ่มงาน</p>
+                <p class="text-label-md font-semibold text-on-surface text-left break-words m-0 mt-0.5 leading-tight" id="dt-start-date">-</p>
               </div>
-              <div class="bg-surface-container rounded-xl px-4 py-3">
-                <p class="text-label-xs text-outline">บริษัท</p>
-                <p class="text-label-md font-semibold text-on-surface" id="dt-company">-</p>
+              <div class="bg-surface-container rounded-xl px-3 py-2 min-w-0">
+                <p class="text-label-xs text-outline m-0">บริษัท</p>
+                <p class="text-label-md font-semibold text-on-surface text-left break-words m-0 mt-0.5 leading-tight" id="dt-company">-</p>
               </div>
             </div>
 
             <!-- Request Details Section -->
-            <p class="text-label-xs font-bold text-outline uppercase tracking-widest pt-2">รายละเอียดคำขอ</p>
+            <p class="text-label-xs font-bold text-outline uppercase tracking-widest">รายละเอียดคำขอ</p>
             <div class="grid grid-cols-2 gap-3">
-              <div class="bg-surface-container rounded-xl px-4 py-3">
-                <p class="text-label-xs text-outline">${t('common.type')}</p>
-                <p class="text-label-md font-semibold text-on-surface" id="dt-doc-type">-</p>
+              <div class="bg-surface-container rounded-xl px-3 py-2 min-w-0">
+                <p class="text-label-xs text-outline m-0">${t('common.type')}</p>
+                <p class="text-label-md font-semibold text-on-surface text-left break-words m-0 mt-0.5 leading-tight" id="dt-doc-type">-</p>
               </div>
-              <div class="bg-surface-container rounded-xl px-4 py-3">
-                <p class="text-label-xs text-outline">${t('newReq.labelPurpose')}</p>
-                <p class="text-label-md font-semibold text-on-surface" id="dt-purpose">-</p>
+              <div class="bg-surface-container rounded-xl px-3 py-2 min-w-0">
+                <p class="text-label-xs text-outline m-0">${t('newReq.labelPurpose')}</p>
+                <p class="text-label-md font-semibold text-on-surface text-left break-words m-0 mt-0.5 leading-tight" id="dt-purpose">-</p>
               </div>
-              <div class="bg-surface-container rounded-xl px-4 py-3">
-                <p class="text-label-xs text-outline">${t('newReq.labelLanguage')}</p>
-                <p class="text-label-md font-semibold text-on-surface" id="dt-language">-</p>
+              <div class="bg-surface-container rounded-xl px-3 py-2 min-w-0">
+                <p class="text-label-xs text-outline m-0">${t('newReq.labelLanguage')}</p>
+                <p class="text-label-md font-semibold text-on-surface text-left break-words m-0 mt-0.5 leading-tight" id="dt-language">-</p>
               </div>
-              <div class="bg-surface-container rounded-xl px-4 py-3">
-                <p class="text-label-xs text-outline">${t('newReq.labelSalary')}</p>
-                <p class="text-label-md font-semibold text-on-surface" id="dt-salary">-</p>
+              <div class="bg-surface-container rounded-xl px-3 py-2 min-w-0">
+                <p class="text-label-xs text-outline m-0">${t('newReq.labelSalary')}</p>
+                <p class="text-label-md font-semibold text-on-surface text-left break-words m-0 mt-0.5 leading-tight" id="dt-salary">-</p>
               </div>
-              <div class="bg-surface-container rounded-xl px-4 py-3">
-                <p class="text-label-xs text-outline">${t('newReq.sectionDelivery')}</p>
-                <p class="text-label-md font-semibold text-on-surface" id="dt-delivery">-</p>
+              <div class="bg-surface-container rounded-xl px-3 py-2 min-w-0">
+                <p class="text-label-xs text-outline m-0">${t('newReq.sectionDelivery')}</p>
+                <p class="text-label-md font-semibold text-on-surface text-left break-words m-0 mt-0.5 leading-tight" id="dt-delivery">-</p>
               </div>
-              <div class="bg-surface-container rounded-xl px-4 py-3">
-                <p class="text-label-xs text-outline">สถานที่รับเอกสาร</p>
-                <p class="text-label-md font-semibold text-on-surface" id="dt-pickup">-</p>
+              <div class="bg-surface-container rounded-xl px-3 py-2 min-w-0">
+                <p class="text-label-xs text-outline m-0">สถานที่รับเอกสาร</p>
+                <p class="text-label-md font-semibold text-on-surface text-left break-words m-0 mt-0.5 leading-tight" id="dt-pickup">-</p>
               </div>
-              <div class="bg-surface-container rounded-xl px-4 py-3">
-                <p class="text-label-xs text-outline">${t('dashboard.tableDate')}</p>
-                <p class="text-label-md font-semibold text-on-surface" id="dt-date">-</p>
+              <div class="bg-surface-container rounded-xl px-3 py-2 min-w-0">
+                <p class="text-label-xs text-outline m-0">${t('dashboard.tableDate')}</p>
+                <p class="text-label-md font-semibold text-on-surface text-left break-words m-0 mt-0.5 leading-tight" id="dt-date">-</p>
               </div>
-              <div class="bg-surface-container rounded-xl px-4 py-3">
-                <p class="text-label-xs text-outline">เจ้าหน้าที่ HR ที่เลือก</p>
-                <p class="text-label-md font-semibold text-on-surface" id="dt-hr-officer">-</p>
+              <div class="bg-surface-container rounded-xl px-3 py-2 min-w-0">
+                <p class="text-label-xs text-outline m-0">เจ้าหน้าที่ HR ที่เลือก</p>
+                <p class="text-label-md font-semibold text-on-surface text-left break-words m-0 mt-0.5 leading-tight" id="dt-hr-officer">-</p>
               </div>
             </div>
 
             <!-- Employee Notes -->
-            <div class="bg-surface-container rounded-xl px-4 py-3">
+            <div class="bg-surface-container rounded-xl px-3 py-2 min-w-0">
               <p class="text-label-xs text-outline mb-2">${t('newReq.labelNotes')}</p>
               <p class="text-label-md font-semibold text-on-surface whitespace-pre-wrap" id="dt-notes">-</p>
             </div>
 
             <!-- Attachments -->
-            <div class="bg-surface-container rounded-xl px-4 py-3">
+            <div class="bg-surface-container rounded-xl px-3 py-2 min-w-0">
               <p class="text-label-xs text-outline mb-2">${t('common.attachments')}</p>
               <div id="dt-attachments" class="flex flex-wrap gap-2"></div>
             </div>
@@ -771,37 +808,37 @@ export function renderAdminDashboard(data) {
               <div id="dt-issue-mismatch" class="hidden rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-label-sm text-amber-900"></div>
               <div class="grid grid-cols-2 gap-3">
                 <div class="bg-primary/5 border border-primary/15 rounded-xl px-4 py-3 col-span-2">
-                  <p class="text-label-xs text-outline">${t('dashboard.issueCertNumber')}</p>
+                  <p class="text-label-xs text-outline m-0">${t('dashboard.issueCertNumber')}</p>
                   <p class="text-label-md font-bold text-primary" id="dt-issue-cert-no">-</p>
                 </div>
-                <div class="bg-surface-container rounded-xl px-4 py-3">
-                  <p class="text-label-xs text-outline">${t('dashboard.issueDate')}</p>
-                  <p class="text-label-md font-semibold text-on-surface" id="dt-issue-date">-</p>
+                <div class="bg-surface-container rounded-xl px-3 py-2 min-w-0">
+                  <p class="text-label-xs text-outline m-0">${t('dashboard.issueDate')}</p>
+                  <p class="text-label-md font-semibold text-on-surface text-left break-words m-0 mt-0.5 leading-tight" id="dt-issue-date">-</p>
                 </div>
-                <div class="bg-surface-container rounded-xl px-4 py-3">
-                  <p class="text-label-xs text-outline">${t('dashboard.issueTemplate')}</p>
-                  <p class="text-label-md font-semibold text-on-surface" id="dt-issue-template">-</p>
+                <div class="bg-surface-container rounded-xl px-3 py-2 min-w-0">
+                  <p class="text-label-xs text-outline m-0">${t('dashboard.issueTemplate')}</p>
+                  <p class="text-label-md font-semibold text-on-surface text-left break-words m-0 mt-0.5 leading-tight" id="dt-issue-template">-</p>
                 </div>
-                <div class="bg-surface-container rounded-xl px-4 py-3 col-span-2">
-                  <p class="text-label-xs text-outline">${t('dashboard.issueHrbpOnDoc')}</p>
-                  <p class="text-label-md font-semibold text-on-surface" id="dt-issue-hrbp">-</p>
+                <div class="bg-surface-container rounded-xl px-3 py-2 min-w-0 col-span-2">
+                  <p class="text-label-xs text-outline m-0">${t('dashboard.issueHrbpOnDoc')}</p>
+                  <p class="text-label-md font-semibold text-on-surface text-left break-words m-0 mt-0.5 leading-tight" id="dt-issue-hrbp">-</p>
                   <p class="text-label-xs text-outline mt-1" id="dt-issue-hrbp-contact">-</p>
                 </div>
-                <div class="bg-surface-container rounded-xl px-4 py-3 col-span-2">
-                  <p class="text-label-xs text-outline">${t('dashboard.issueSigner')}</p>
-                  <p class="text-label-md font-semibold text-on-surface" id="dt-issue-signer">-</p>
+                <div class="bg-surface-container rounded-xl px-3 py-2 min-w-0 col-span-2">
+                  <p class="text-label-xs text-outline m-0">${t('dashboard.issueSigner')}</p>
+                  <p class="text-label-md font-semibold text-on-surface text-left break-words m-0 mt-0.5 leading-tight" id="dt-issue-signer">-</p>
                 </div>
-                <div class="bg-surface-container rounded-xl px-4 py-3 col-span-2">
-                  <p class="text-label-xs text-outline">${t('dashboard.issueRemark')}</p>
+                <div class="bg-surface-container rounded-xl px-3 py-2 min-w-0 col-span-2">
+                  <p class="text-label-xs text-outline m-0">${t('dashboard.issueRemark')}</p>
                   <p class="text-label-md font-semibold text-on-surface whitespace-pre-wrap" id="dt-issue-remark">-</p>
                 </div>
-                <div class="bg-surface-container rounded-xl px-4 py-3">
-                  <p class="text-label-xs text-outline">${t('dashboard.issueBy')}</p>
-                  <p class="text-label-md font-semibold text-on-surface" id="dt-issue-by">-</p>
+                <div class="bg-surface-container rounded-xl px-3 py-2 min-w-0">
+                  <p class="text-label-xs text-outline m-0">${t('dashboard.issueBy')}</p>
+                  <p class="text-label-md font-semibold text-on-surface text-left break-words m-0 mt-0.5 leading-tight" id="dt-issue-by">-</p>
                 </div>
-                <div class="bg-surface-container rounded-xl px-4 py-3">
-                  <p class="text-label-xs text-outline">${t('dashboard.issueSavedAt')}</p>
-                  <p class="text-label-md font-semibold text-on-surface" id="dt-issue-saved-at">-</p>
+                <div class="bg-surface-container rounded-xl px-3 py-2 min-w-0">
+                  <p class="text-label-xs text-outline m-0">${t('dashboard.issueSavedAt')}</p>
+                  <p class="text-label-md font-semibold text-on-surface text-left break-words m-0 mt-0.5 leading-tight" id="dt-issue-saved-at">-</p>
                 </div>
               </div>
             </div>
@@ -810,19 +847,15 @@ export function renderAdminDashboard(data) {
             <div id="dt-delivery-status-section" class="hidden space-y-3 pt-2">
               <p class="text-label-xs font-bold text-outline uppercase tracking-widest">${t('dashboard.deliveryStatus')}</p>
               <div class="grid grid-cols-2 gap-3">
-                <div class="bg-surface-container rounded-xl px-4 py-3">
-                  <p class="text-label-xs text-outline">${t('dashboard.deliveryStatus')}</p>
+                <div class="bg-surface-container rounded-xl px-3 py-2 min-w-0">
+                  <p class="text-label-xs text-outline m-0">${t('dashboard.deliveryStatus')}</p>
                   <p class="text-label-md font-semibold" id="dt-delivery-status-value">-</p>
                 </div>
-                <div class="bg-surface-container rounded-xl px-4 py-3">
-                  <p class="text-label-xs text-outline">${t('newReq.labelPickup')}</p>
-                  <p class="text-label-md font-semibold text-on-surface" id="dt-delivery-pickup">-</p>
+                <div class="bg-surface-container rounded-xl px-3 py-2 min-w-0">
+                  <p class="text-label-xs text-outline m-0">${t('newReq.labelPickup')}</p>
+                  <p class="text-label-md font-semibold text-on-surface text-left break-words m-0 mt-0.5 leading-tight" id="dt-delivery-pickup">-</p>
                 </div>
               </div>
-              <button id="btn-mark-delivered" class="w-full py-3 bg-tertiary text-on-tertiary font-bold rounded-xl hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
-                <span class="material-symbols-outlined text-[18px]">check_circle</span>
-                ${t('dashboard.markDelivered')}
-              </button>
             </div>
 
           </div>
@@ -859,9 +892,52 @@ export function renderAdminDashboard(data) {
           </div>
         </div>
       </div>
-    </div>
+	    </div>
 
-    <!-- ===== Rejection Modal (HR) ===== -->
+	    <!-- ===== Delivery Modal (HR) ===== -->
+	    <div id="deliver-modal" class="fixed inset-0 z-[100] flex items-center justify-center p-4 hidden">
+	      <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" id="deliver-modal-backdrop"></div>
+	      <div class="relative bg-surface-container-lowest rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+	        <div class="h-1.5 bg-amber-500 w-full"></div>
+	        <div class="flex items-center justify-between px-6 pt-5 pb-3">
+	          <div class="flex items-center gap-3">
+	            <span class="material-symbols-outlined text-amber-600">local_shipping</span>
+	            <h3 class="text-title-md font-bold text-on-surface">${t('dashboard.deliverTitle')}</h3>
+	          </div>
+	          <button id="deliver-modal-close" class="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-surface-container-high text-outline transition-colors">
+	            <span class="material-symbols-outlined text-[20px]">close</span>
+	          </button>
+	        </div>
+	        <div class="px-6 pb-6">
+	          <p id="deliver-modal-req-name" class="text-label-sm text-on-surface-variant mb-5">${t('dashboard.reqOf')} <span class="font-semibold text-on-surface">-</span></p>
+	          <div class="space-y-4">
+	            <div>
+	              <label class="block text-label-md font-semibold text-on-surface-variant mb-2">${t('dashboard.deliverMethod')} <span class="text-error">*</span></label>
+	              <select id="deliver-method" class="w-full bg-white border border-outline-variant rounded-lg px-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-on-surface font-medium">
+	                <option value="">-- ${t('common.select')} --</option>
+	              </select>
+	            </div>
+	            <div>
+	              <label class="block text-label-md font-semibold text-on-surface-variant mb-2">${t('dashboard.deliverDate')} <span class="text-error">*</span></label>
+	              <input id="deliver-date" type="date" class="w-full bg-white border border-outline-variant rounded-lg px-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-on-surface font-medium" />
+	            </div>
+	            <div>
+	              <label class="block text-label-md font-semibold text-on-surface-variant mb-2">${t('dashboard.deliverTime')}</label>
+	              <input id="deliver-time" type="time" class="w-full bg-white border border-outline-variant rounded-lg px-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-on-surface font-medium" />
+	            </div>
+	          </div>
+	          <div class="flex gap-3 mt-5">
+	            <button id="deliver-modal-cancel" class="flex-1 py-3 border border-outline-variant text-on-surface-variant font-bold rounded-xl hover:bg-surface-container transition-colors">${t('common.cancel')}</button>
+	            <button id="deliver-modal-save" class="flex-[2] py-3 bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700 transition-opacity flex items-center justify-center gap-2">
+	              <span class="material-symbols-outlined text-[18px]">check_circle</span>
+	              ${t('dashboard.deliverConfirm')}
+	            </button>
+	          </div>
+	        </div>
+	      </div>
+	    </div>
+
+	    <!-- ===== Rejection Modal (HR) ===== -->
     <div id="reject-modal" class="fixed inset-0 z-[100] flex items-center justify-center p-4 hidden">
       <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" id="reject-modal-backdrop"></div>
       <div class="relative bg-surface-container-lowest rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
@@ -962,6 +1038,7 @@ export function initAdminDashboard(container) {
         let valueColor = 'text-primary';
         if (kpi.color === 'success') { borderClass = 'border-green-200'; iconBgClass = 'bg-green-100'; iconColorClass = 'text-green-700'; subtextClass = 'text-green-700 font-bold'; }
         else if (kpi.color === 'error') { borderClass = 'border-red-200'; iconBgClass = 'bg-red-100'; iconColorClass = 'text-red-700'; valueColor = 'text-red-700'; subtextClass = 'text-red-700 font-bold'; }
+        else if (kpi.color === 'tertiary') { borderClass = 'border-amber-300'; iconBgClass = 'bg-amber-100'; iconColorClass = 'text-amber-700'; valueColor = 'text-amber-700'; subtextClass = 'text-amber-700 font-bold'; }
         const isActive = filterStatus === kpi.filterValue;
         return `<div class="kpi-card tonal-card p-5 border ${borderClass} relative overflow-hidden group transition-all cursor-pointer ${isActive ? 'ring-2 ring-primary shadow-md' : 'hover:border-primary/50'}" data-filter-value="${kpi.filterValue}">
           <div class="flex justify-between items-start mb-2">
@@ -974,7 +1051,7 @@ export function initAdminDashboard(container) {
       }).join('');
 
       // Update KPI section
-      const kpiGrid = container.querySelector('.grid.grid-cols-1.sm\\:grid-cols-2.lg\\:grid-cols-5');
+      const kpiGrid = container.querySelector('#kpi-grid');
       if (kpiGrid) kpiGrid.innerHTML = kpisHtml;
 
       // Build table rows HTML
@@ -987,15 +1064,22 @@ export function initAdminDashboard(container) {
         else if (req.status === 'in-review' && req.eta_date) badgeClass = 'bg-[#dce1ff] text-primary font-bold';
         else if (req.status === 'approved') badgeClass = 'bg-[#dcfce7] text-[#166534] font-bold';
         else if (req.eta_date) badgeClass = 'bg-[#dce1ff] text-primary font-bold';
+        const isDelivered = req.status === 'approved'
+          && hasPhysicalDelivery(req)
+          && req.physical_delivered;
+        const needsDelivery = req.status === 'approved'
+          && hasPhysicalDelivery(req)
+          && !req.physical_delivered;
 
-        return `<tr class="hover:bg-surface-container-low transition-colors">
+        return `<tr class="hover:bg-surface-container-low transition-colors ${isDelivered ? 'bg-teal-50/50' : ''}">
           <td class="px-6 py-4"><div class="flex items-center gap-3 whitespace-nowrap">
             ${renderRequesterAvatar(req)}
             <div><p class="text-label-md font-bold text-on-surface">${req.name}</p><p class="text-[10px] text-outline">${req.phone}</p></div>
           </div></td>
+          <td class="px-6 py-4 text-label-sm text-on-surface-variant whitespace-nowrap">${req.cert_number || '-'}</td>
           <td class="px-6 py-4 text-label-sm text-on-surface-variant whitespace-nowrap">${req.department}</td>
           <td class="px-6 py-4 text-label-md text-on-surface whitespace-nowrap">${req.type}</td>
-          <td class="px-6 py-4 whitespace-nowrap"><span class="px-2.5 py-1 rounded-md text-[10px] whitespace-nowrap ${badgeClass}">${req.statusLabel}</span></td>
+          <td class="px-6 py-4"><div class="flex flex-col gap-1 items-start"><span class="px-2.5 py-1 rounded-md text-[10px] whitespace-nowrap ${badgeClass}">${req.statusLabel}</span>${isDelivered ? `<span class="inline-flex items-center gap-0.5 px-2 py-0.5 bg-teal-100 text-teal-700 rounded text-[10px] font-bold"><span class="material-symbols-outlined text-[12px]">local_shipping</span>${t('status.delivered')}</span>` : ''}</div></td>
           <td class="px-6 py-4 text-label-sm text-on-surface-variant whitespace-nowrap">${req.date}</td>
           <td class="px-6 py-4 text-label-sm text-on-surface-variant whitespace-nowrap">${formatThaiDate(req.eta_date)}</td>
           <td class="px-6 py-4 whitespace-nowrap"><div class="flex flex-col gap-1">
@@ -1009,11 +1093,12 @@ export function initAdminDashboard(container) {
               ${(req.status === 'submitted' || (req.status === 'in-review' && !req.eta_date)) ? `<button class="btn-acknowledge w-full flex items-center gap-3 px-4 py-3 text-label-md text-on-surface hover:bg-surface-container-high transition-colors text-left" data-req-id="${req.id}" data-req-name="${req.name}"><span class="material-symbols-outlined text-[18px] text-outline">handshake</span>${t('dashboard.actionAck')}</button>` : ''}
               ${req.eta_date ? `<button class="btn-edit-eta w-full flex items-center gap-3 px-4 py-3 text-label-md text-on-surface hover:bg-surface-container-high transition-colors text-left" data-req-id="${req.id}" data-req-name="${req.name}"><span class="material-symbols-outlined text-[18px] text-outline">schedule</span>${t('dashboard.actionEta')}</button>
               <button class="btn-create-cert w-full flex items-center gap-3 px-4 py-3 text-label-md text-on-surface hover:bg-surface-container-high transition-colors text-left" data-req-id="${req.id}" data-req-name="${req.name}"><span class="material-symbols-outlined text-[18px] text-outline">badge</span>${t('dashboard.actionCreateCert')}</button>` : ''}
+              ${needsDelivery ? `<button class="btn-deliver w-full flex items-center gap-3 px-4 py-3 text-label-md text-amber-800 hover:bg-amber-50 transition-colors text-left" data-req-id="${req.id}" data-req-name="${req.name}"><span class="material-symbols-outlined text-[18px] text-amber-600">local_shipping</span>${t('dashboard.actionDeliver')}</button>` : ''}
               ${!isCancelledByEmp && req.status !== 'rejected' && req.status !== 'approved' && req.status !== 'cancelled' ? `<hr class="border-t border-outline-variant mx-3"><button class="btn-reject w-full flex items-center gap-3 px-4 py-3 text-label-md text-error hover:bg-error-container/20 transition-colors text-left" data-req-id="${req.id}" data-req-name="${req.name}"><span class="material-symbols-outlined text-[18px]">cancel</span>${t('dashboard.actionReject')}</button>` : ''}
             </div>
           </div></td>
         </tr>`;
-      }).join('') : `<tr><td colspan="8" class="p-8 text-center text-on-surface-variant">${t('common.noResults')}</td></tr>`;
+      }).join('') : `<tr><td colspan="9" class="p-8 text-center text-on-surface-variant">${t('common.noResults')}</td></tr>`;
 
       // Update table body
       const tbody = container.querySelector('#pending-table-body');
@@ -1120,7 +1205,7 @@ export function initAdminDashboard(container) {
           setField('dt-dept', raw.department || '');
           setField('dt-position', raw.position || '');
           setField('dt-phone', raw.phone || '');
-          setField('dt-start-date', raw.start_date || '');
+          setField('dt-start-date', formatDateISO(raw.start_date) || '-');
           setField('dt-company', raw.company_name || '');
           setField('dt-doc-type', raw.type || raw.doc_type || '');
           setField('dt-purpose', raw.purpose || '');
@@ -1196,20 +1281,19 @@ export function initAdminDashboard(container) {
           window.location.hash = `/admin/certificate-builder?reqId=${reqId}`;
         });
       });
+      container.querySelectorAll('.btn-deliver').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const reqName = btn.getAttribute('data-req-name') || t('dashboard.thisRequest');
+          const reqId = btn.getAttribute('data-req-id') || '';
+          openDeliverModal(reqName, reqId);
+        });
+      });
       container.querySelectorAll('.btn-page').forEach(btn => {
         btn.addEventListener('click', (e) => {
           const pg = parseInt(btn.getAttribute('data-page'), 10);
           if (isNaN(pg) || pg < 1 || pg > totalPages) return;
           sessionStorage.setItem('dashboard-pending-page', String(pg));
-          refreshDashboard();
-        });
-      });
-      container.querySelectorAll('.kpi-card').forEach(card => {
-        card.addEventListener('click', () => {
-          const val = card.getAttribute('data-filter-value');
-          const current = getDashboardFilterStatus();
-          sessionStorage.setItem('dashboard-pending-page', '1');
-          sessionStorage.setItem('dashboard-pending-filter', val === current ? '' : val);
           refreshDashboard();
         });
       });
@@ -1322,6 +1406,60 @@ export function initAdminDashboard(container) {
     document.body.style.overflow = '';
   };
 
+  // ── Deliver Modal ────────────────────────────────────────────────
+  const deliverModal = container.querySelector('#deliver-modal');
+  let currentDeliverId = '';
+  const loadDeliveryMethodsForModal = async () => {
+    try {
+      const result = await getDeliveryMethods();
+      return result.data || [];
+    } catch { return []; }
+  };
+  const openDeliverModal = async (reqName, reqId) => {
+    if (!deliverModal) return;
+    currentDeliverId = reqId;
+    container.querySelector('#deliver-modal-req-name').innerHTML = `${t('dashboard.reqOf')} <span class="font-semibold text-on-surface">${reqName}</span>`;
+    const select = container.querySelector('#deliver-method');
+    select.value = '';
+    const methods = await loadDeliveryMethodsForModal();
+    select.innerHTML = `<option value="">-- ${t('common.select')} --</option>` + methods.map(m => `<option value="${m.name}">${m.name}</option>`).join('');
+    container.querySelector('#deliver-date').value = '';
+    container.querySelector('#deliver-time').value = '';
+    deliverModal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+  };
+  const closeDeliverModal = () => {
+    deliverModal?.classList.add('hidden');
+    document.body.style.overflow = '';
+  };
+
+  container.querySelector('#deliver-modal-close')?.addEventListener('click', closeDeliverModal);
+  container.querySelector('#deliver-modal-cancel')?.addEventListener('click', closeDeliverModal);
+  container.querySelector('#deliver-modal-backdrop')?.addEventListener('click', closeDeliverModal);
+
+  container.querySelector('#deliver-modal-save')?.addEventListener('click', async () => {
+    const method = container.querySelector('#deliver-method')?.value;
+    const date = container.querySelector('#deliver-date')?.value;
+    const time = container.querySelector('#deliver-time')?.value;
+    if (!method) { showToast(t('dashboard.deliverValidation'), 'error'); return; }
+    if (!date) { showToast(t('dashboard.deliverValidation'), 'error'); return; }
+    closeDeliverModal();
+    try {
+      await updateRequest(currentDeliverId, {
+        physical_delivered: true,
+        delivery_method: method,
+        delivery_date: date,
+        delivery_time: time || '',
+      });
+      showToast(t('dashboard.markDeliveredSuccess'), 'success');
+      await refreshDashboard();
+      const reopenBtn = container.querySelector(`.btn-view-detail[data-req-id="${currentDeliverId}"]`);
+      if (reopenBtn) reopenBtn.click();
+    } catch (e) {
+      showToast('Error: ' + e.message, 'error');
+    }
+  });
+
   container.querySelector('#reject-modal-close')?.addEventListener('click', closeRejectModal);
   container.querySelector('#reject-modal-cancel')?.addEventListener('click', closeRejectModal);
   container.querySelector('#reject-modal-backdrop')?.addEventListener('click', closeRejectModal);
@@ -1361,6 +1499,16 @@ export function initAdminDashboard(container) {
       e.stopPropagation();
       const reqId = btn.getAttribute('data-req-id') || '';
       window.location.hash = `/admin/certificate-builder?reqId=${reqId}`;
+    });
+  });
+
+  // ── Deliver Modal ────────────────────────────────────────────────
+  container.querySelectorAll('.btn-deliver').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const reqName = btn.getAttribute('data-req-name') || t('dashboard.thisRequest');
+      const reqId = btn.getAttribute('data-req-id') || '';
+      openDeliverModal(reqName, reqId);
     });
   });
 
@@ -1514,7 +1662,6 @@ export function initAdminDashboard(container) {
           const isDelivered = raw.physical_delivered || false;
           const statusEl = container.querySelector('#dt-delivery-status-value');
           const pickupEl = container.querySelector('#dt-delivery-pickup');
-          const btnEl = container.querySelector('#btn-mark-delivered');
           if (statusEl) {
             statusEl.textContent = isDelivered ? t('dashboard.deliverySent') : t('dashboard.deliveryPending');
             statusEl.classList.toggle('text-green-700', isDelivered);
@@ -1522,25 +1669,6 @@ export function initAdminDashboard(container) {
           }
           if (pickupEl) {
             pickupEl.textContent = raw.pickup_location || '-';
-          }
-          if (btnEl) {
-            btnEl.classList.toggle('hidden', isDelivered);
-            btnEl.onclick = async () => {
-              btnEl.disabled = true;
-              try {
-                await fetch(`${apiBase}/api/requests/${raw.id}`, {
-                  method: 'PUT',
-                  headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('hrbp_token') || '') },
-                  body: JSON.stringify({ physical_delivered: true })
-                });
-                showToast(t('dashboard.markDeliveredSuccess'), 'success');
-                refreshDashboard();
-              } catch (e) {
-                showToast('Error: ' + e.message, 'error');
-              } finally {
-                btnEl.disabled = false;
-              }
-            };
           }
         } else {
           deliveryStatusSection.classList.add('hidden');
@@ -1554,7 +1682,7 @@ export function initAdminDashboard(container) {
         if (files.length > 0) {
           attachEl.innerHTML = files.map(f => `<span class="inline-flex items-center gap-1 px-3 py-1.5 bg-primary-fixed/20 text-primary rounded-lg text-label-xs font-semibold"><span class="material-symbols-outlined text-[14px]">attach_file</span>${f.name || f.key || 'ไฟล์แนบ'}</span>`).join('');
         } else {
-          attachEl.innerHTML = '<span class="text-label-xs text-outline">ไม่มีไฟล์แนบ</span>';
+          attachEl.innerHTML = '<span class="text-label-xs text-outline m-0">ไม่มีไฟล์แนบ</span>';
         }
       }
 
@@ -1586,16 +1714,24 @@ export function initAdminDashboard(container) {
     });
   });
 
-  // ── KPI Filter Cards (initial render) ──────────────────────────
-  container.querySelectorAll('.kpi-card').forEach(card => {
-    card.addEventListener('click', () => {
+  // ── KPI Grid Filter ───────────────────────────────────────────
+  const kpiGridEl = container.querySelector('#kpi-grid');
+  if (kpiGridEl) {
+    kpiGridEl.addEventListener('click', (e) => {
+      const card = e.target.closest('.kpi-card');
+      if (!card) return;
       const val = card.getAttribute('data-filter-value');
       const current = getDashboardFilterStatus();
+      container.querySelectorAll('.kpi-card').forEach(c => {
+        const cv = c.getAttribute('data-filter-value') || '';
+        c.classList.toggle('ring-2', cv === val && val !== current);
+        c.classList.toggle('shadow-md', cv === val && val !== current);
+      });
       sessionStorage.setItem('dashboard-pending-page', '1');
       sessionStorage.setItem('dashboard-pending-filter', val === current ? '' : val);
       refreshDashboard();
     });
-  });
+  }
 
   // ── Pagination ─────────────────────────────────────────────────
   container.querySelectorAll('.btn-page').forEach(btn => {

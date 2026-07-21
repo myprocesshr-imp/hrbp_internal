@@ -30,6 +30,7 @@ const MIGRATION_FILES = [
   'migrations/009_pickup_cert_master.sql',
   'migrations/010_signature_url.sql',
   'migrations/012_add_template_language.sql',
+  'migrations/013_delivery_methods.sql',
 ];
 
 if (!fs.existsSync(D1_DIR)) {
@@ -147,15 +148,16 @@ for (const file of files) {
   }
 
   // Verify key tables exist
-  const required = ['users', 'business_units', 'requests', 'templates', 'pickup_locations', 'cert_master_data'];
+  const required = ['users', 'business_units', 'requests', 'templates', 'pickup_locations', 'cert_master_data', 'delivery_methods'];
   const missing = required.filter((t) => !hasTable(db, t));
 
   if (missing.length === 0) {
     const pickupCount = db.prepare('SELECT count(*) as c FROM pickup_locations').get().c;
     const certCount = db.prepare('SELECT count(*) as c FROM cert_master_data').get().c;
+    const deliveryCount = db.prepare('SELECT count(*) as c FROM delivery_methods').get().c;
     const tmplCount = db.prepare('SELECT count(*) as c FROM templates').get().c;
     console.log(`  ✅ All ${required.length} required tables present`);
-    console.log(`     pickup_locations: ${pickupCount}, cert_master_data: ${certCount}, templates: ${tmplCount}`);
+    console.log(`     pickup_locations: ${pickupCount}, cert_master_data: ${certCount}, delivery_methods: ${deliveryCount}, templates: ${tmplCount}`);
   } else {
     console.error(`  ❌ Missing tables: ${missing.join(', ')}`);
   }

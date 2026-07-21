@@ -6,6 +6,7 @@ const API_BASE = '/api';
 const MOCK_DB_KEY_USERS = 'hrbp_mock_users';
 const MOCK_DB_KEY_BUS = 'hrbp_mock_bus';
 const MOCK_DB_KEY_PICKUP = 'hrbp_pickup_locations';
+const MOCK_DB_KEY_DELIVERY_METHODS = 'hrbp_delivery_methods';
 const MOCK_DB_KEY_CERT_MASTER = 'hrbp_cert_master_data';
 const MOCK_DB_VERSION_KEY = 'hrbp_mock_db_version';
 const MOCK_DB_VERSION = 5; // v5: Add chatchawan_tu to SEED_USERS
@@ -55,6 +56,17 @@ export function initMockDB() {
       { id: 3, name: 'One BKK' }
     ];
     localStorage.setItem(MOCK_DB_KEY_PICKUP, JSON.stringify(defaultPickups));
+  }
+
+  if (!localStorage.getItem(MOCK_DB_KEY_DELIVERY_METHODS)) {
+    const defaultMethods = [
+      { id: 1, name: 'มารับด้วยตนเอง' },
+      { id: 2, name: 'ส่ง Courier' },
+      { id: 3, name: 'ส่งพนักงานภายใน' },
+      { id: 4, name: 'ส่งมอบโดยตรง' },
+      { id: 5, name: 'อื่นๆ' }
+    ];
+    localStorage.setItem(MOCK_DB_KEY_DELIVERY_METHODS, JSON.stringify(defaultMethods));
   }
 
   // Migration: remove EC-20260707-9887 if present
@@ -326,6 +338,43 @@ function handleMockRequest(path, method, body) {
     }
   }
 
+  // delivery methods
+  if (path.startsWith('/delivery-methods')) {
+    const methods = JSON.parse(localStorage.getItem(MOCK_DB_KEY_DELIVERY_METHODS) || '[]');
+    const idMatch = path.match(/^\/delivery-methods\/([^?]+)/);
+    if (idMatch) {
+      const id = idMatch[1];
+      if (method === 'PUT') {
+        const idx = methods.findIndex(m => String(m.id) === String(id));
+        if (idx !== -1) {
+          methods[idx].name = body.name;
+          localStorage.setItem(MOCK_DB_KEY_DELIVERY_METHODS, JSON.stringify(methods));
+          return { data: [methods[idx]] };
+        }
+        throw new Error('Delivery method not found');
+      }
+      if (method === 'DELETE') {
+        const filtered = methods.filter(m => String(m.id) !== String(id));
+        localStorage.setItem(MOCK_DB_KEY_DELIVERY_METHODS, JSON.stringify(filtered));
+        return { success: true };
+      }
+    } else {
+      if (method === 'GET') {
+        return { data: methods };
+      }
+      if (method === 'POST') {
+        const existing = methods.find(m => m.name.toLowerCase() === body.name.toLowerCase());
+        if (existing) {
+          throw new Error('Delivery method already exists');
+        }
+        const newMethod = { id: Date.now(), name: body.name };
+        methods.push(newMethod);
+        localStorage.setItem(MOCK_DB_KEY_DELIVERY_METHODS, JSON.stringify(methods));
+        return { data: [newMethod] };
+      }
+    }
+  }
+
   // certificate master data
   if (path.startsWith('/cert-master-data')) {
     const data = JSON.parse(localStorage.getItem(MOCK_DB_KEY_CERT_MASTER) || '{}');
@@ -500,6 +549,30 @@ function handleMockRequest(path, method, body) {
       if (body.canResubmit !== undefined) existing[idx].canResubmit = body.canResubmit;
       if (body.canDownload !== undefined) existing[idx].canDownload = body.canDownload;
       if (body.cert_ready !== undefined) existing[idx].cert_ready = body.cert_ready;
+      if (body.physical_delivered !== undefined) {
+        existing[idx].physical_delivered = body.physical_delivered;
+        const m = existing[idx].request_data || {};
+        m.physical_delivered = body.physical_delivered;
+        existing[idx].request_data = m;
+      }
+      if (body.delivery_method !== undefined) {
+        existing[idx].delivery_method = body.delivery_method;
+        const m = existing[idx].request_data || {};
+        m.delivery_method = body.delivery_method;
+        existing[idx].request_data = m;
+      }
+      if (body.delivery_date !== undefined) {
+        existing[idx].delivery_date = body.delivery_date;
+        const m = existing[idx].request_data || {};
+        m.delivery_date = body.delivery_date;
+        existing[idx].request_data = m;
+      }
+      if (body.delivery_time !== undefined) {
+        existing[idx].delivery_time = body.delivery_time;
+        const m = existing[idx].request_data || {};
+        m.delivery_time = body.delivery_time;
+        existing[idx].request_data = m;
+      }
       if (body.notes !== undefined) existing[idx].notes = body.notes;
       if (body.type !== undefined) existing[idx].type = body.type;
       if (body.purpose !== undefined) existing[idx].purpose = body.purpose;
@@ -509,7 +582,7 @@ function handleMockRequest(path, method, body) {
         'cert_number', 'cert_issued_date', 'cert_issued_at', 'cert_download_until',
         'cert_template_id', 'cert_template_name', 'cert_number_generated', 'cert_issue_snapshot',
         'can_download',
-        'hr_signer_name', 'hr_signer_position', 'hr_signer_phone',
+        'hr_signer_name', 'hr_signer_position', 'hr_signer_phone', 'hr_signer_signature',
         'hr_officer_name', 'hr_officer_phone', 'hr_officer_email', 'hr_officer_id',
         'hr_purpose_detail', 'hr_salary_amount',
       ];
@@ -672,6 +745,23 @@ export async function deletePickupLocation(id) {
   return request('DELETE', `/pickup-locations/${id}`);
 }
 
+// ── Delivery Methods ──────────────────────
+export async function getDeliveryMethods() {
+  return request('GET', '/delivery-methods');
+}
+
+export async function createDeliveryMethod(name) {
+  return request('POST', '/delivery-methods', { name });
+}
+
+export async function updateDeliveryMethod(id, name) {
+  return request('PUT', `/delivery-methods/${id}`, { name });
+}
+
+export async function deleteDeliveryMethod(id) {
+  return request('DELETE', `/delivery-methods/${id}`);
+}
+
 // ── Requests ──────────────────────────────────
 function generateMockRequests() {
   const statusLabels = { 'submitted': 'ส่งคำขอแล้ว', 'in-review': 'รอดำเนินการ', 'approved': 'อนุมัติแล้ว', 'rejected': 'ปฏิเสธ', 'cancelled': 'ยกเลิกโดยพนักงาน' };
@@ -727,6 +817,12 @@ function generateMockRequests() {
         rejection_reason: stored.rejection_reason || normalized.rejection_reason || '',
         rejected_by: stored.rejected_by || normalized.rejected_by || '',
         cert_ready: stored.cert_ready ?? normalized.cert_ready ?? false,
+        physical_delivered: stored.physical_delivered ?? normalized.physical_delivered ?? false,
+        delivery_method: stored.delivery_method || normalized.delivery_method || '',
+        delivery_date: stored.delivery_date || normalized.delivery_date || '',
+        delivery_time: stored.delivery_time || normalized.delivery_time || '',
+        delivery: stored.delivery || normalized.delivery || '',
+        delivery_value: stored.delivery_value || normalized.delivery_value || '',
         cert_issued_at: stored.cert_issued_at || normalized.cert_issued_at || '',
         cert_download_until: stored.cert_download_until || normalized.cert_download_until || '',
       };

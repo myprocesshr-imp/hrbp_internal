@@ -4,6 +4,7 @@
  */
 import { getBusinessUnits, createBusinessUnit, updateBusinessUnit, deleteBusinessUnit } from '../lib/api.js';
 import { getPickupLocations, createPickupLocation, updatePickupLocation, deletePickupLocation } from '../lib/api.js';
+import { getDeliveryMethods, createDeliveryMethod, updateDeliveryMethod, deleteDeliveryMethod } from '../lib/api.js';
 import { getCertMasterData, setCertMasterData } from '../lib/api.js';
 import { t } from '../lib/i18n.js';
 import { getCertDownloadDays, setCertDownloadDays, MIN_CERT_DOWNLOAD_DAYS, MAX_CERT_DOWNLOAD_DAYS } from '../lib/download-policy.js';
@@ -43,6 +44,10 @@ export function renderAdminSettings() {
         <button id="settings-tab-cert" class="settings-tab flex items-center gap-3 px-4 py-3 bg-surface-container text-on-surface-variant font-bold rounded-lg transition-colors text-left hover:bg-surface-container-high" data-tab="cert">
           <span class="material-symbols-outlined">badge</span>
           <span>${t('settings.tabCert')}</span>
+        </button>
+        <button id="settings-tab-delivery" class="settings-tab flex items-center gap-3 px-4 py-3 bg-surface-container text-on-surface-variant font-bold rounded-lg transition-colors text-left hover:bg-surface-container-high" data-tab="delivery">
+          <span class="material-symbols-outlined">local_shipping</span>
+          <span>${t('settings.tabDelivery')}</span>
         </button>
       </div>
 
@@ -208,9 +213,39 @@ export function renderAdminSettings() {
           </table>
         </div>
       </div>
-    </div>
 
-    <!-- ===== BU Modal ===== -->
+      <!-- ===== Delivery Methods Section (hidden by default) ===== -->
+      <div id="settings-section-delivery" class="flex-1 bg-surface-container-lowest border border-outline-variant rounded-xl p-6 shadow-sm hidden">
+        <div class="flex justify-between items-center mb-6">
+          <h3 class="text-headline-md font-bold text-on-surface">${t('settings.deliveryTitle')}</h3>
+          <button id="add-delivery-btn" class="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-lg font-label-md hover:opacity-90 transition-opacity shadow-sm">
+            <span class="material-symbols-outlined text-[18px]">add</span>
+            ${t('settings.deliveryAdd')}
+          </button>
+        </div>
+        <p class="text-label-sm text-on-surface-variant mb-6">${t('settings.deliveryDesc')}</p>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left">
+            <thead>
+              <tr class="border-b border-outline-variant bg-surface-container-low">
+                <th class="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase">${t('settings.deliveryName')}</th>
+                <th class="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase text-right w-32">${t('settings.deliveryManage')}</th>
+              </tr>
+            </thead>
+            <tbody id="delivery-tbody" class="divide-y divide-outline-variant">
+              <tr>
+                <td colspan="2" class="px-6 py-8 text-center text-on-surface-variant font-medium">
+                  <div class="flex items-center justify-center gap-2">
+                    <span class="material-symbols-outlined animate-spin text-[20px] text-primary">sync</span>
+                    <span>${t('common.loading')}</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
     <div id="bu-modal" class="fixed inset-0 z-[100] flex items-center justify-center p-4 hidden">
       <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" id="bu-modal-backdrop"></div>
       <div class="relative bg-surface-container-lowest rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-fade-in">
@@ -254,6 +289,31 @@ export function renderAdminSettings() {
           </div>
           <div class="flex gap-3 pt-4">
             <button type="button" id="pickup-modal-cancel" class="flex-1 py-2.5 border border-outline-variant text-on-surface-variant hover:bg-surface-container rounded-xl font-bold transition-all">${t('common.cancel')}</button>
+            <button type="submit" class="flex-1 py-2.5 bg-primary text-on-primary hover:opacity-90 rounded-xl font-bold transition-all shadow-md">${t('common.save')}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ===== Delivery Method Modal ===== -->
+    <div id="delivery-modal" class="fixed inset-0 z-[100] flex items-center justify-center p-4 hidden">
+      <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" id="delivery-modal-backdrop"></div>
+      <div class="relative bg-surface-container-lowest rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-fade-in">
+        <div class="h-1.5 bg-primary w-full"></div>
+        <div class="flex items-center justify-between px-6 pt-5 pb-3">
+          <h3 class="text-title-md font-bold text-on-surface" id="delivery-modal-title">${t('settings.deliveryModalTitle')}</h3>
+          <button id="delivery-modal-close" class="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-surface-container-high text-outline transition-colors">
+            <span class="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
+        <form id="delivery-form" class="p-6 space-y-4">
+          <input type="hidden" id="delivery-id" />
+          <div>
+            <label class="block text-label-sm font-semibold text-on-surface-variant mb-1">${t('settings.deliveryNameLabel')}</label>
+            <input type="text" id="delivery-name" required class="w-full bg-white border border-outline-variant rounded-xl px-4 py-2.5 text-body-md text-on-surface focus:border-primary outline-none" placeholder="${t('settings.deliveryNamePlaceholder')}" />
+          </div>
+          <div class="flex gap-3 pt-4">
+            <button type="button" id="delivery-modal-cancel" class="flex-1 py-2.5 border border-outline-variant text-on-surface-variant hover:bg-surface-container rounded-xl font-bold transition-all">${t('common.cancel')}</button>
             <button type="submit" class="flex-1 py-2.5 bg-primary text-on-primary hover:opacity-90 rounded-xl font-bold transition-all shadow-md">${t('common.save')}</button>
           </div>
         </form>
@@ -435,6 +495,7 @@ export async function initAdminSettings(container) {
   const sectionBu = container.querySelector('#settings-section-bu');
   const sectionPickup = container.querySelector('#settings-section-pickup');
   const sectionCert = container.querySelector('#settings-section-cert');
+  const sectionDelivery = container.querySelector('#settings-section-delivery');
   container.querySelectorAll('.settings-tab').forEach(tab => {
     tab.addEventListener('click', () => {
       container.querySelectorAll('.settings-tab').forEach(t => {
@@ -447,6 +508,7 @@ export async function initAdminSettings(container) {
       sectionBu?.classList.toggle('hidden', target !== 'bu');
       sectionPickup?.classList.toggle('hidden', target !== 'pickup');
       sectionCert?.classList.toggle('hidden', target !== 'cert');
+      sectionDelivery?.classList.toggle('hidden', target !== 'delivery');
       if (target === 'cert') {
         loadDownloadPolicySettings();
         loadCertMasterData();
@@ -655,6 +717,111 @@ export async function initAdminSettings(container) {
   pickupCloseBtn?.addEventListener('click', closePickupModal);
   pickupCancelBtn?.addEventListener('click', closePickupModal);
   pickupBackdrop?.addEventListener('click', closePickupModal);
+
+  // ── Delivery Methods logic ───────────────────
+  const deliveryTbody = container.querySelector('#delivery-tbody');
+  const addDeliveryBtn = container.querySelector('#add-delivery-btn');
+  const deliveryModal = container.querySelector('#delivery-modal');
+  const deliveryModalTitle = container.querySelector('#delivery-modal-title');
+  const deliveryForm = container.querySelector('#delivery-form');
+  const deliveryIdInput = container.querySelector('#delivery-id');
+  const deliveryNameInput = container.querySelector('#delivery-name');
+  const deliveryCloseBtn = container.querySelector('#delivery-modal-close');
+  const deliveryCancelBtn = container.querySelector('#delivery-modal-cancel');
+  const deliveryBackdrop = container.querySelector('#delivery-modal-backdrop');
+
+  let currentDeliveryMethods = [];
+
+  const loadDeliveryMethods = async () => {
+    try {
+      const result = await getDeliveryMethods();
+      currentDeliveryMethods = result.data || [];
+      renderDeliveryMethods();
+    } catch (err) {
+      console.error('Error fetching delivery methods:', err);
+      deliveryTbody.innerHTML = `<tr><td colspan="2" class="px-6 py-8 text-center text-error font-medium">${t('error.loadData')}</td></tr>`;
+    }
+  };
+
+  const renderDeliveryMethods = () => {
+    if (currentDeliveryMethods.length === 0) {
+      deliveryTbody.innerHTML = `<tr><td colspan="2" class="px-6 py-8 text-center text-on-surface-variant font-medium">${t('settings.deliveryEmpty')}</td></tr>`;
+      return;
+    }
+    deliveryTbody.innerHTML = currentDeliveryMethods.map(m => `
+      <tr class="hover:bg-surface-container-low transition-colors group">
+        <td class="px-6 py-4"><span class="inline-block px-3 py-1 bg-primary-fixed/20 text-primary rounded-lg border border-primary/10 font-bold">${m.name}</span></td>
+        <td class="px-6 py-4 text-right">
+          <div class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button class="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors edit-delivery-btn" data-id="${m.id}" title="${t('common.edit')}"><span class="material-symbols-outlined text-[18px]">edit</span></button>
+            <button class="p-2 text-error hover:bg-error-container rounded-lg transition-colors delete-delivery-btn" data-id="${m.id}" title="${t('common.delete')}"><span class="material-symbols-outlined text-[18px]">delete</span></button>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+    deliveryTbody.querySelectorAll('.edit-delivery-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const m = currentDeliveryMethods.find(d => String(d.id) === btn.dataset.id);
+        if (m) openDeliveryModal(m);
+      });
+    });
+    deliveryTbody.querySelectorAll('.delete-delivery-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (confirm(t('settings.deliveryDeleteConfirm'))) {
+          try {
+            await deleteDeliveryMethod(btn.dataset.id);
+            currentDeliveryMethods = currentDeliveryMethods.filter(m => String(m.id) !== btn.dataset.id);
+            renderDeliveryMethods();
+          } catch (err) {
+            console.error('Error deleting delivery method:', err);
+            alert(t('settings.deliveryDeleteError'));
+          }
+        }
+      });
+    });
+  };
+
+  const openDeliveryModal = (method = null) => {
+    deliveryModalTitle.textContent = t('settings.deliveryModalTitle');
+    deliveryIdInput.value = method ? method.id : '';
+    deliveryNameInput.value = method ? method.name : '';
+    deliveryModal.classList.remove('hidden');
+    deliveryNameInput.focus();
+  };
+  const closeDeliveryModal = () => deliveryModal?.classList.add('hidden');
+
+  deliveryForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = deliveryIdInput.value;
+    const name = deliveryNameInput.value.trim();
+    if (!name) return;
+    if (!id) {
+      const dup = currentDeliveryMethods.find(m => m.name.toLowerCase() === name.toLowerCase());
+      if (dup) { alert(t('settings.deliveryDuplicate')); return; }
+    }
+    try {
+      if (id) {
+        await updateDeliveryMethod(id, name);
+        const idx = currentDeliveryMethods.findIndex(m => String(m.id) === id);
+        if (idx > -1) currentDeliveryMethods[idx].name = name;
+      } else {
+        const result = await createDeliveryMethod(name);
+        if (result.data?.length) currentDeliveryMethods.push(result.data[0]);
+      }
+      renderDeliveryMethods();
+      closeDeliveryModal();
+    } catch (err) {
+      console.error('Error saving delivery method:', err);
+      alert(t('settings.deliverySaveError'));
+    }
+  });
+
+  addDeliveryBtn?.addEventListener('click', () => openDeliveryModal());
+  deliveryCloseBtn?.addEventListener('click', closeDeliveryModal);
+  deliveryCancelBtn?.addEventListener('click', closeDeliveryModal);
+  deliveryBackdrop?.addEventListener('click', closeDeliveryModal);
+
+  loadDeliveryMethods();
 
   // ── Certificate Master Data ──────────────────
   let certData = {};

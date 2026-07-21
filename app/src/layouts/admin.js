@@ -25,7 +25,7 @@ export function renderAdminLayout(contentHTML) {
   return `
     <div class="flex min-h-screen overflow-x-hidden">
       <!-- Sidebar -->
-      <aside id="sidebar" class="hidden md:flex flex-col h-screen fixed left-0 top-0 pb-8 bg-surface-container-low border-r border-outline-variant z-50 transition-all duration-300 ${isCollapsed ? 'w-20 px-2 pt-4' : 'w-64 px-4 pt-6'}">
+      <aside id="sidebar" class="hidden md:flex flex-col h-screen fixed left-0 top-0 pb-8 bg-surface-container-low border-r border-outline-variant z-50 transition-[width,padding] duration-300 ease-in-out ${isCollapsed ? 'w-20 px-2 pt-4' : 'w-64 px-4 pt-6'}">
         <!-- Sidebar Header / Brand -->
         <div class="flex items-center justify-between mb-6 px-2">
           <div class="flex items-center gap-3" id="sidebar-brand">
@@ -79,7 +79,7 @@ export function renderAdminLayout(contentHTML) {
       </aside>
 
       <!-- Main Content Area -->
-      <main id="main-content" class="flex-grow p-4 md:p-8 min-h-screen pt-8 pb-20 transition-all duration-300" style="width: ${isCollapsed ? 'calc(100% - 80px)' : 'calc(100% - 256px)'}; margin-left: ${isCollapsed ? '80px' : '256px'};">
+      <main id="main-content" class="p-4 md:p-8 min-h-screen pt-8 pb-20 transition-[width,margin-left] duration-300 ease-in-out" style="width: ${isCollapsed ? 'calc(100% - 80px)' : 'calc(100% - 256px)'}; margin-left: ${isCollapsed ? '80px' : '256px'};">
         <div class="page-enter">
           ${contentHTML}
         </div>
@@ -169,7 +169,7 @@ export async function initAdminLayout(container) {
   try {
     const result = await getUsers();
     const users = result.users || [];
-    if (syncCurrentUserFromList(users)) {
+    if (await syncCurrentUserFromList(users)) {
       const synced = JSON.parse(localStorage.getItem('hrbp_user') || 'null');
       if (synced) {
         setCurrentUser(synced);

@@ -6,6 +6,40 @@ export async function onRequest(context) {
   const json = (data, status = 200) =>
     new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
 
+  // Safely parse the request body. A malformed/empty body must return 400,
+  // not an unhandled 500.
+  async function parseBody(req) {
+    try {
+      return await req.json();
+    } catch {
+      return {};
+    }
+  }
+
+  // Normalize enum-like fields so a stray value can never trip a CHECK
+  // constraint and bubble up as a 500.
+  const LANGUAGES = ['th', 'en', 'both'];
+  const STATUSES = ['draft', 'published', 'disabled'];
+
+  const normalizeLanguage = (v) =>
+    LANGUAGES.includes(v) ? v : 'th';
+  const normalizeStatus = (v) =>
+    STATUSES.includes(v) ? v : 'draft';
+
+  // Detect whether the templates table already has a `language` column.
+  // This keeps the endpoint working even if migration 012 hasn't been applied,
+  // instead of 500-ing on `no such column: language`.
+  async function hasLanguageColumn() {
+    try {
+      const { results } = await env.DB.prepare(
+        "SELECT name FROM pragma_table_info('templates') WHERE name = 'language'"
+      ).all();
+      return Array.isArray(results) && results.length > 0;
+    } catch {
+      return false;
+    }
+  }
+
   // GET /api/templates
   if (method === 'GET') {
     const { results } = await env.DB.prepare(
@@ -16,23 +50,39 @@ export async function onRequest(context) {
 
   // POST /api/templates - create template
   if (method === 'POST') {
-    const { id, name, category, content, status, version, updated_by, language } = await request.json();
+    const body = await parseBody(request);
+    const { id, name, category, content, status, version, updated_by, language } = body;
     if (!id || !name || !category) {
       return json({ error: 'ID, Name, and Category are required' }, 400);
     }
 
+    const lang = normalizeLanguage(language);
+    const st = normalizeStatus(status);
+    const hasLang = await hasLanguageColumn();
+
     try {
-      await env.DB.prepare(
-        `INSERT INTO templates (id, name, category, content, status, version, updated_at, updated_by, language)
-         VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?, ?)`
-      ).bind(
-        id, name, category, content || '', status || 'draft',
-        version || 'V 1.0', updated_by || 'System', language || 'th'
-      ).run();
+      if (hasLang) {
+        await env.DB.prepare(
+          `INSERT INTO templates (id, name, category, content, status, version, updated_at, updated_by, language)
+           VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?, ?)`
+        ).bind(
+          id, name, category, content || '', st,
+          version || 'V 1.0', updated_by || 'System', lang
+        ).run();
+      } else {
+        await env.DB.prepare(
+          `INSERT INTO templates (id, name, category, content, status, version, updated_at, updated_by)
+           VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?)`
+        ).bind(
+          id, name, category, content || '', st,
+          version || 'V 1.0', updated_by || 'System'
+        ).run();
+      }
 
       const tmpl = await env.DB.prepare('SELECT * FROM templates WHERE id = ?').bind(id).first();
       return json({ data: tmpl }, 201);
     } catch (e) {
+      console.error('[Templates POST Error]', e);
       if (e.message?.includes('UNIQUE')) {
         return json({ error: 'Template with this ID already exists' }, 409);
       }
@@ -43,24 +93,44 @@ export async function onRequest(context) {
   // PUT /api/templates/:id - update template
   if (method === 'PUT') {
     const id = url.pathname.split('/').pop();
-    const { name, category, content, status, version, updated_by, language } = await request.json();
+    const body = await parseBody(request);
+    const { name, category, content, status, version, updated_by, language } = body;
     if (!name || !category) {
       return json({ error: 'Name and Category are required' }, 400);
     }
 
+    const lang = normalizeLanguage(language);
+    const st = normalizeStatus(status);
+    const hasLang = await hasLanguageColumn();
+
     try {
-      await env.DB.prepare(
-        `UPDATE templates 
-         SET name = ?, category = ?, content = ?, status = ?, version = ?, language = ?, updated_at = datetime('now'), updated_by = ? 
-         WHERE id = ?`
-      ).bind(
-        name, category, content || '', status || 'draft',
-        version || 'V 1.0', language || 'th', updated_by || 'System', id
-      ).run();
+      if (hasLang) {
+        await env.DB.prepare(
+          `UPDATE templates
+           SET name = ?, category = ?, content = ?, status = ?, version = ?, language = ?, updated_at = datetime('now'), updated_by = ?
+           WHERE id = ?`
+        ).bind(
+          name, category, content || '', st,
+          version || 'V 1.0', lang, updated_by || 'System', id
+        ).run();
+      } else {
+        await env.DB.prepare(
+          `UPDATE templates
+           SET name = ?, category = ?, content = ?, status = ?, version = ?, updated_at = datetime('now'), updated_by = ?
+           WHERE id = ?`
+        ).bind(
+          name, category, content || '', st,
+          version || 'V 1.0', updated_by || 'System', id
+        ).run();
+      }
 
       const tmpl = await env.DB.prepare('SELECT * FROM templates WHERE id = ?').bind(id).first();
+      if (!tmpl) {
+        return json({ error: 'Template not found' }, 404);
+      }
       return json({ data: tmpl });
     } catch (e) {
+      console.error('[Templates PUT Error]', e);
       return json({ error: e.message }, 500);
     }
   }

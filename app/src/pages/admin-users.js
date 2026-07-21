@@ -375,7 +375,7 @@ export async function initAdminUsers(container) {
     try {
       await updateUser(userId, { role: updatedRole, responsible_bu: selectedBUs, status: updatedStatus });
       allUsers = allUsers.map(u => u.id === userId ? { ...u, role: updatedRole, responsible_bu: selectedBUs, status: updatedStatus } : u);
-      if (syncCurrentUserFromList(allUsers)) {
+      if (await syncCurrentUserFromList(allUsers)) {
         const synced = JSON.parse(localStorage.getItem('hrbp_user') || 'null');
         if (synced) setCurrentUser(synced);
         window.dispatchEvent(new Event('hashchange'));
@@ -469,7 +469,7 @@ export async function initAdminUsers(container) {
     await loadBUs();
     const result = await getUsers();
     allUsers = result.users || [];
-    if (syncCurrentUserFromList(allUsers)) {
+    if (await syncCurrentUserFromList(allUsers)) {
       const synced = JSON.parse(localStorage.getItem('hrbp_user') || 'null');
       if (synced) setCurrentUser(synced);
       window.dispatchEvent(new Event('hashchange'));

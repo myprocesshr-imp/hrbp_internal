@@ -7,6 +7,7 @@ import { navigate } from '../router.js';
 import { getUsers, getHrmsEmployee, uploadFile, getPickupLocations, createRequest, getTemplates } from '../lib/api.js';
 import { loadAvatarForElement } from '../lib/avatar-helper.js';
 import { t } from '../lib/i18n.js';
+import { mapHrmsProfileFields } from '../lib/hrms-helper.js';
 
 const COUNTRIES = [
   'Afghanistan','Albania','Algeria','Andorra','Angola','Antigua and Barbuda','Argentina','Armenia',
@@ -689,7 +690,7 @@ export async function initNewRequest(container) {
           email: emp.EMail,
           phone: emp.Sim_Number,
           start_date: emp.StartDate,
-          sex_id: emp.SexID,
+          sex_id: mapHrmsProfileFields(emp).sex_id,
           fname_e: emp.FNameE,
           lname_e: emp.LNameE
         };

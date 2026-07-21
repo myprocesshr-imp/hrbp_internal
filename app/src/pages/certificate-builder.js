@@ -30,7 +30,7 @@ import {
   syncCertCounter,
 } from '../lib/templates.js';
 // NOTE: finalizeCertificateHtml moved to cert-renderer.js; import from there instead
-import { fillPlaceholders, parseTemplateHtml, signatureImgHtml, finalizeCertificateHtml, escapeHtmlAttr } from '../lib/cert-renderer.js';
+import { fillPlaceholders, parseTemplateHtml, signatureImgHtml, finalizeCertificateHtml, escapeHtmlAttr, resolveSignatureUrl } from '../lib/cert-renderer.js';
 import { resolveCompanyAddress, enrichCertWithCompanyAddress, getCompanyMap } from '../lib/company-address.js';
 import { isoToday, computeDownloadUntil, parseThaiIssuedDate } from '../lib/download-policy.js';
 
@@ -1595,6 +1595,15 @@ export async function initCertificateBuilder(container) {
     const saveMgrRec = managers.find(x => String(x.id) === String(curMgrId));
     const saveMgr  = isThai() ? ($('cb-mgr-name')?.textContent || '') : (saveMgrRec?.full_name_en || saveMgrRec?.full_name || '');
     const savePos  = $('cb-mgr-pos')?.textContent  || '';
+    // Persist the HR signer's signature at save time so it survives into the
+    // employee's downloaded PDF (previously the signature was only resolved via
+    // a fragile localStorage name lookup at render time, which often returned '').
+    // Resolve to a renderable URL (data URL or /api/signatures/{id}); an R2 key
+    // alone would be a broken relative path inside the PDF.
+    const saveMgrSig = resolveSignatureUrl(
+      saveMgrRec?.signature || saveMgrRec?.signature_url || '',
+      saveMgrRec?.id
+    );
     const saveDate = $('cb-issue-date')?.textContent || todayThaiLong();
     const saveOfficer = resolveOfficerContact(container, staff, curOffId);
     const saveOffN = saveOfficer.name;
@@ -1623,6 +1632,7 @@ export async function initCertificateBuilder(container) {
       reqs[idx].hr_signer_name     = saveMgr;
       reqs[idx].hr_signer_position = savePos;
       reqs[idx].hr_signer_phone    = saveMgrRec?.phone || '';
+      reqs[idx].hr_signer_signature = saveMgrSig;
       const purposeDetail = saveRmk.includes('เลือกหมายเหตุ') ? '' : saveRmk;
       reqs[idx].hr_officer_name    = saveOffN;
       reqs[idx].hr_officer_phone   = saveOffP;
@@ -1666,6 +1676,7 @@ export async function initCertificateBuilder(container) {
         hr_signer_name: saveMgr,
         hr_signer_position: savePos,
         hr_signer_phone: saveMgrRec?.phone || '',
+        hr_signer_signature: saveMgrSig,
         hr_purpose_detail: purposeDetail,
         hr_salary_amount: saveSal,
         request_hr_officer_name: reqs[idx].hr_officer?.name || '',
@@ -1685,6 +1696,7 @@ export async function initCertificateBuilder(container) {
           hr_signer_name:      saveMgr,
           hr_signer_position:  savePos,
           hr_signer_phone:     saveMgrRec?.phone || '',
+          hr_signer_signature: saveMgrSig,
           hr_officer_name:     saveOffN,
           hr_officer_phone:    saveOffP,
           hr_officer_email:    saveOffE,

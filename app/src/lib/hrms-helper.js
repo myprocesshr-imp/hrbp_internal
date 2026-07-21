@@ -2,14 +2,117 @@
  * HRMS field mapping helpers
  * Maps SexID, FNameE, LNameE from HRMS employee profile.
  */
+import { getHrmsEmployee } from './api.js';
+
+/**
+ * Normalize an HRMS sex value to the internal codes used across the app
+ * ('1' = male, '2' = female). Accepts numeric/string codes and word forms.
+ */
+function normalizeSexId(v) {
+  if (v == null) return '';
+  const s = String(v).trim().toLowerCase();
+  if (['1', 'm', 'male', 'ชาย'].includes(s)) return '1';
+  if (['2', 'f', 'female', 'หญิง'].includes(s)) return '2';
+  return s; // keep as-is if it doesn't match any known form
+}
 
 export function mapHrmsProfileFields(profile = {}) {
+  // HRMS returns the sex value under varying keys; try the common ones.
+  const rawSex = profile.SexID ?? profile.sex_id ?? profile.Sex
+    ?? profile.sex ?? profile.Gender ?? profile.gender ?? '';
+  // Also peek inside a nested profile object if the API nests it.
+  const nested = profile.profile || profile.employee || {};
+  const rawSexNested = nested.SexID ?? nested.sex_id ?? nested.Sex
+    ?? nested.sex ?? nested.Gender ?? nested.gender ?? '';
   return {
-    sex_id: profile.SexID ?? profile.sex_id ?? '',
+    sex_id: normalizeSexId(rawSex || rawSexNested),
     fname_e: (profile.FNameE ?? profile.fname_e ?? '').trim(),
     lname_e: (profile.LNameE ?? profile.lname_e ?? '').trim(),
   };
 }
+
+/**
+ * Enrich a user object with the real English-name fields from HRMS.
+ *
+ * Older accounts that logged in before the English-name columns (fname_e,
+ * lname_e, sex_id) existed never received those fields, so the UI falls back
+ * to the Thai name. This pulls the authoritative values from HRMS and returns
+ * an updated user object (with full_name_en derived from fname_e/lname_e).
+ *
+ * @param {object} user - Current user; must carry a non-empty `emp_id`.
+ * @returns {Promise<object|null>} enriched user, or null if HRMS is unavailable
+ *          or the user has no emp_id / already up-to-date.
+ */
+export async function enrichUserFromHrms(user) {
+  if (!user || !user.emp_id) return null;
+
+  let profile = null;
+  try {
+    const res = await getHrmsEmployee(user.emp_id);
+    profile = res?.data?.employee || null;
+  } catch (err) {
+    console.warn('[enrichUserFromHrms] HRMS fetch failed:', err);
+    return null;
+  }
+  if (!profile) return null;
+
+  const fields = mapHrmsProfileFields(profile);
+  const hasNewData = fields.fname_e || fields.lname_e || fields.sex_id;
+  if (!hasNewData) return null;
+
+  // Only treat as "missing" when the stored value is empty, so we don't
+  // clobber data that was already correctly populated.
+  const needsFname = !user.fname_e && fields.fname_e;
+  const needsLname = !user.lname_e && fields.lname_e;
+  const needsSex = !user.sex_id && fields.sex_id;
+  if (!needsFname && !needsLname && !needsSex) return null;
+
+  const enriched = {
+    ...user,
+    fname_e: user.fname_e || fields.fname_e,
+    lname_e: user.lname_e || fields.lname_e,
+    sex_id: user.sex_id || fields.sex_id,
+  };
+  enriched.full_name_en = buildEnglishName(enriched) || user.full_name_en || '';
+  return enriched;
+}
+
+/**
+ * Persist English-name fields into the shared `hrbp_mock_users` store (the
+ * source for both the admin-users table via getUsers() and the Certificate
+ * Builder HR-staff list via loadHRStaff()). Without this, enrichment written
+ * only to localStorage `hrbp_user` never reaches the views that actually
+ * render the names.
+ *
+ * @param {object} enriched - User with fname_e/lname_e/sex_id/full_name_en.
+ * @returns {object|null} the matched record (with fields applied) or null.
+ */
+export function persistEnglishNameToMockUsers(enriched) {
+  if (!enriched) return null;
+  try {
+    const KEY = 'hrbp_mock_users';
+    const users = JSON.parse(localStorage.getItem(KEY) || '[]');
+    const idx = users.findIndex(u =>
+      (enriched.id != null && String(u.id) === String(enriched.id)) ||
+      (enriched.username && u.username === enriched.username) ||
+      (enriched.emp_id && u.emp_id === enriched.emp_id)
+    );
+    if (idx === -1) return null;
+    users[idx] = {
+      ...users[idx],
+      fname_e: enriched.fname_e || users[idx].fname_e || '',
+      lname_e: enriched.lname_e || users[idx].lname_e || '',
+      sex_id: enriched.sex_id || users[idx].sex_id || '',
+      full_name_en: enriched.full_name_en || users[idx].full_name_en || '',
+    };
+    localStorage.setItem(KEY, JSON.stringify(users));
+    return users[idx];
+  } catch (_) {
+    return null;
+  }
+}
+
+
 
 export function buildEnglishName(source = {}) {
   const first = source.FNameE ?? source.fname_e ?? '';
@@ -18,11 +121,21 @@ export function buildEnglishName(source = {}) {
 }
 
 export function getGenderPronouns(sexId) {
-  const id = String(sexId ?? '').trim().toLowerCase();
-  if (id === '1' || id === 'm' || id === 'male' || id === 'ชาย') {
+  // Parse numerically so '1'/'1.0'/1 (male) and '2'/'2.0'/2 (female) all match,
+  // regardless of whether the stored value came through as a float-like string.
+  const n = parseFloat(sexId);
+  if (n === 1) {
     return { subject: 'He', possessive: 'His', object: 'him', reflexive: 'his' };
   }
-  if (id === '2' || id === 'f' || id === 'female' || id === 'หญิง') {
+  if (n === 2) {
+    return { subject: 'She', possessive: 'Her', object: 'her', reflexive: 'her' };
+  }
+  // Fall back to word forms (m/male/ชาย, f/female/หญิง)
+  const id = String(sexId ?? '').trim().toLowerCase();
+  if (['m', 'male', 'ชาย'].includes(id)) {
+    return { subject: 'He', possessive: 'His', object: 'him', reflexive: 'his' };
+  }
+  if (['f', 'female', 'หญิง'].includes(id)) {
     return { subject: 'She', possessive: 'Her', object: 'her', reflexive: 'her' };
   }
   return { subject: 'She/He', possessive: 'Her/His', object: 'her/him', reflexive: 'her/his' };
@@ -44,11 +157,19 @@ export function genderPronounPlaceholders(sexId) {
 }
 
 export function getSexLabel(sexId, lang = 'th') {
-  const id = String(sexId ?? '').trim().toLowerCase();
-  if (id === '1' || id === 'm' || id === 'male' || id === 'ชาย') {
+  // Parse numerically so '1'/'1.0'/1 (male) and '2'/'2.0'/2 (female) all match.
+  const n = parseFloat(sexId);
+  if (n === 1) {
     return lang === 'en' ? 'Male' : 'ชาย';
   }
-  if (id === '2' || id === 'f' || id === 'female' || id === 'หญิง') {
+  if (n === 2) {
+    return lang === 'en' ? 'Female' : 'หญิง';
+  }
+  const id = String(sexId ?? '').trim().toLowerCase();
+  if (['m', 'male', 'ชาย'].includes(id)) {
+    return lang === 'en' ? 'Male' : 'ชาย';
+  }
+  if (['f', 'female', 'หญิง'].includes(id)) {
     return lang === 'en' ? 'Female' : 'หญิง';
   }
   return lang === 'en' ? '-' : '-';

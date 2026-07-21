@@ -57,8 +57,11 @@ function mapRequestRow(r, userRow) {
     acknowledged_by: meta.acknowledged_by || null,
     eta_date: meta.eta_date || '',
     eta_submitted_at: meta.eta_submitted_at || '',
-    cert_ready: meta.cert_ready || false,
-    physical_delivered: meta.physical_delivered || false,
+	    cert_ready: meta.cert_ready || false,
+	    physical_delivered: meta.physical_delivered || false,
+	    delivery_method: meta.delivery_method || '',
+	    delivery_date: meta.delivery_date || '',
+	    delivery_time: meta.delivery_time || '',
     date: meta.date || r.created_at || '',
     created_at: r.created_at || '',
     updated_at: r.updated_at || '',
@@ -399,6 +402,9 @@ export async function onRequest(context) {
     if (body.rejection_reason !== undefined) existingMeta.rejection_reason = body.rejection_reason;
     if (body.cert_ready !== undefined) existingMeta.cert_ready = body.cert_ready;
     if (body.physical_delivered !== undefined) existingMeta.physical_delivered = body.physical_delivered;
+    if (body.delivery_method !== undefined) existingMeta.delivery_method = body.delivery_method;
+    if (body.delivery_date !== undefined) existingMeta.delivery_date = body.delivery_date;
+    if (body.delivery_time !== undefined) existingMeta.delivery_time = body.delivery_time;
     // Strip employee-cancellation flags when HR rejects — label precedence
     // must be HR-rejected, not employee-cancelled, in the DB.
     if (body.status === 'rejected') {
@@ -423,7 +429,7 @@ export async function onRequest(context) {
       'cert_number', 'cert_issued_date', 'cert_issued_at', 'cert_download_until',
       'cert_template_id', 'cert_template_name', 'cert_number_generated', 'cert_issue_snapshot',
       'canDownload', 'can_download',
-      'hr_signer_name', 'hr_signer_position', 'hr_signer_phone',
+      'hr_signer_name', 'hr_signer_position', 'hr_signer_phone', 'hr_signer_signature',
       'hr_officer_name', 'hr_officer_phone', 'hr_officer_email', 'hr_officer_id',
       'hr_purpose_detail', 'hr_salary_amount',
     ];

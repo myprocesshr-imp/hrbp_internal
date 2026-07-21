@@ -15,6 +15,7 @@ export default defineConfig(({ mode }) => {
         '/api/file':           { target: 'http://localhost:8788', changeOrigin: true },
         '/api/templates':      { target: 'http://localhost:8788', changeOrigin: true },
         '/api/pickup-locations': { target: 'http://localhost:8788', changeOrigin: true },
+        '/api/delivery-methods': { target: 'http://localhost:8788', changeOrigin: true },
         '/api/cert-master-data': { target: 'http://localhost:8788', changeOrigin: true },
         '/api/signatures':      { target: 'http://localhost:8788', changeOrigin: true },
       }

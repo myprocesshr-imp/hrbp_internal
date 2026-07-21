@@ -12,6 +12,7 @@ import {
 } from '../lib/download-policy.js';
 import { dataService } from '../lib/data-service.js';
 import { getHrmsEmployee } from '../lib/api.js';
+import { mapHrmsProfileFields } from '../lib/hrms-helper.js';
 
 let currentRequestsData = { requests: [], pagination: { page: 1, limit: 10, total: 0, totalPages: 0 } };
 let currentSearch = '';
@@ -132,7 +133,7 @@ function renderTableRows(visibleRequests) {
       <tr class="hover:bg-surface-container-low transition-colors cursor-pointer request-row" data-id="${req.id || req.request_code}" data-status="${req.status}" data-type="${typeStr}" data-date="${dateStr}" data-status-label="${effectiveLabel}" data-attachments='${JSON.stringify(attachments)}' data-eta="${req.eta_date || ''}" data-cert-ready="${req.cert_ready ? 'true' : ''}">
         <td class="px-6 py-5 text-label-md font-bold text-primary">${req.id || req.request_code}</td>
         <td class="px-6 py-5 text-body-md text-on-surface-variant">${dateStr}</td>
-        <td class="px-6 py-5 text-body-md text-on-surface">${typeStr}${createdByLabel}</td>
+        <td class="px-6 py-5 text-body-md text-on-surface whitespace-normal break-words">${typeStr}${createdByLabel}</td>
         <td class="px-6 py-5">${attachments.length > 0 ? `<span class="inline-flex items-center gap-1 text-label-sm text-primary"><span class="material-symbols-outlined text-[16px]">attach_file</span>${attachments.length} ${t('employeeReq.fileCount')}</span>` : '<span class="text-label-sm text-outline">-</span>'}</td>
         <td class="px-6 py-5">
           ${getStatusBadge(effectiveStatus, effectiveLabel)}
@@ -149,8 +150,9 @@ function renderTableRows(visibleRequests) {
               </button>
             ` : ''}
             ${req.can_cancel || req.canCancel ? `
-              <button class="p-2 hover:bg-error-container/20 rounded-lg transition-colors text-error btn-cancel" data-id="${req.request_code || req.id}" title="${t('common.cancel')}">
-                <span class="material-symbols-outlined text-[18px]">close</span>
+              <button class="flex items-center gap-1 px-3 py-1.5 border border-error text-error rounded-lg text-label-sm font-medium hover:bg-error-container/20 transition-colors btn-cancel" data-id="${req.request_code || req.id}" title="${t('common.cancel')}">
+                <span class="material-symbols-outlined text-[16px]">cancel</span>
+                <span>${t('common.cancel')}</span>
               </button>
             ` : ''}
             ${req.can_resubmit || req.canResubmit ? `
@@ -321,13 +323,19 @@ export function renderEmployeeRequests(data) {
                   <p id="on-behalf-preview-empid" class="text-label-sm text-primary font-medium">-</p>
                 </div>
               </div>
-              <div class="grid grid-cols-2 gap-2 text-label-sm">
-                <span class="text-on-surface-variant">ตำแหน่ง</span>
-                <span id="on-behalf-preview-position" class="font-semibold text-on-surface truncate">-</span>
-                <span class="text-on-surface-variant">แผนก</span>
-                <span id="on-behalf-preview-dept" class="font-semibold text-on-surface truncate">-</span>
-                <span class="text-on-surface-variant">บริษัท</span>
-                <span id="on-behalf-preview-company" class="font-semibold text-on-surface truncate">-</span>
+              <div class="space-y-2 text-label-sm">
+                <div>
+                  <p class="text-on-surface-variant m-0">ตำแหน่ง</p>
+                  <p id="on-behalf-preview-position" class="font-semibold text-on-surface break-words text-left m-0 mt-0.5 leading-tight">-</p>
+                </div>
+                <div>
+                  <p class="text-on-surface-variant m-0">แผนก</p>
+                  <p id="on-behalf-preview-dept" class="font-semibold text-on-surface break-words text-left m-0 mt-0.5 leading-tight">-</p>
+                </div>
+                <div>
+                  <p class="text-on-surface-variant m-0">บริษัท</p>
+                  <p id="on-behalf-preview-company" class="font-semibold text-on-surface break-words text-left m-0 mt-0.5 leading-tight">-</p>
+                </div>
               </div>
             </div>
           </div>
@@ -672,7 +680,7 @@ export function initEmployeeRequests(container) {
           email: emp.EMail,
           phone: emp.Sim_Number,
           start_date: emp.StartDate,
-          sex_id: emp.SexID,
+          sex_id: mapHrmsProfileFields(emp).sex_id,
           fname_e: emp.FNameE,
           lname_e: emp.LNameE
         };

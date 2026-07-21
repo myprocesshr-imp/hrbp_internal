@@ -34,7 +34,7 @@ export async function onRequest(context) {
     const updates = [];
     const params = [];
 
-    for (const key of ['role', 'responsible_bu', 'full_name', 'email', 'phone', 'status', 'signature_url']) {
+    for (const key of ['role', 'responsible_bu', 'full_name', 'email', 'phone', 'status', 'signature_url', 'fname_e', 'lname_e', 'sex_id']) {
       if (body[key] !== undefined) {
         updates.push(`${key} = ?`);
         params.push(key === 'responsible_bu' ? JSON.stringify(body[key]) : body[key]);

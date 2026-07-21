@@ -97,6 +97,14 @@ function formatThaiDateShort(dateStr) {
   return `${d.getDate()} ${THAI_MONTHS_SHORT[d.getMonth()]} ${d.getFullYear() + 543}`;
 }
 
+/** Extract just the YYYY-MM-DD portion from any date string (ISO, datetime, etc.) */
+export function formatDateISO(dateStr) {
+  if (!dateStr) return '';
+  const m = String(dateStr).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  return String(dateStr);
+}
+
 function todayThaiShort() {
   const d = new Date();
   return `${d.getDate()} ${THAI_MONTHS_SHORT[d.getMonth()]} ${d.getFullYear() + 543}`;
@@ -287,7 +295,7 @@ function buildCertVariables(data, templateRecord = null) {
     abroad_start_date_en: formatEnglishDateFull(abroadStart) || '______________',
     abroad_end_date_en: formatEnglishDateFull(abroadEnd) || '______________',
     hr_signer_signature: signatureImgHtml(
-      resolveSignerSignature(data.hr_signer_name),
+      data.hr_signer_signature || resolveSignerSignature(data.hr_signer_name),
       data.hr_signer_name || 'Signature'
     ),
   };
@@ -305,7 +313,8 @@ export async function generateCertificateHTML(data) {
   let html = fillPlaceholders(templateHtml, variables);
   html = finalizeCertificateHtml(html, {
     offName: variables.hr_officer_name,
-    sigSrc: resolveSignerSignature(enriched.hr_signer_name),
+    // Prefer the signature persisted at HR save time; fall back to name lookup.
+    sigSrc: enriched.hr_signer_signature || resolveSignerSignature(enriched.hr_signer_name),
   });
   return html;
 }
@@ -403,6 +412,13 @@ export function buildCertDataFromRequest(rawReq, user) {
     hr_signer_name:    signerName || '',
     hr_signer_position: snap?.hr_signer_position || rawReq.hr_signer_position || 'HR Department Manager',
     hr_signer_phone:   signerPhone,
+    // Prefer the signature persisted by HR at save time (survives across devices/
+    // browsers). Fall back to a direct request field, then the snapshot's nested
+    // request_data, then '' (which lets the legacy name-lookup run as a fallback).
+    hr_signer_signature:
+      snap?.hr_signer_signature ||
+      rawReq.hr_signer_signature ||
+      rawReq.request_data?.hr_signer_signature || '',
     empCode: empFull.emp_id || user?.emp_id || user?.empCode || rawReq.emp_id || rawReq.empCode || '______________',
     visa_country: rawReq.visa_country || rawReq.abroad_destination || '',
     abroad_destination: rawReq.abroad_destination || rawReq.visa_country || '',
