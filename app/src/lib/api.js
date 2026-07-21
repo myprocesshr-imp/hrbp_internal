@@ -502,7 +502,6 @@ function handleMockRequest(path, method, body) {
     }
 
     if (method === 'POST') {
-      const body = typeof bodyText === 'string' ? JSON.parse(bodyText) : {};
       const existing = JSON.parse(localStorage.getItem('hrbp_employee_requests') || '[]');
       const today = new Date();
       const thaiMonths = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
@@ -532,8 +531,6 @@ function handleMockRequest(path, method, body) {
       const existing = JSON.parse(localStorage.getItem('hrbp_employee_requests') || '[]');
       const idx = existing.findIndex(r => r.id === id);
       if (idx === -1) throw new Error('Request not found');
-
-      const body = typeof bodyText === 'string' ? JSON.parse(bodyText) : {};
 
       // Merge update fields
       if (body.status) {
@@ -830,7 +827,7 @@ function generateMockRequests() {
   }
 
   // Clear stale dummy data from old code (no user_email)
-  if (existing.length > 0) {
+  if (storedReqs.length > 0) {
     localStorage.removeItem('hrbp_employee_requests');
   }
 

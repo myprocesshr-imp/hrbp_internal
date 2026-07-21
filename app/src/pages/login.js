@@ -314,7 +314,7 @@ export function initLoginPage(container) {
         if (!empId) {
           errorDiv.textContent = idmsFailed ? t('login.idmsUnavailable') : t('login.loginError');
           errorDiv.classList.remove('hidden');
-          setLoading(loginSubmitBtn, false);
+          setLoading(loginSubmitBtn, false, t('login.loginBtn'), 'login');
           return;
         }
       } else {
