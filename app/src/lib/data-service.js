@@ -65,13 +65,15 @@ class DataService {
    * This ensures the dataService cache is in sync with the page data
    * so that cancel/update operations work correctly.
    */
-  setData(data) {
+  setData(data, { silent = false } = {}) {
     this._cache = {
       requests: data?.requests || [],
       pagination: data?.pagination || {},
       stats: data?.stats || {},
     };
-    this._emit('requests-updated', this._cache);
+    // `silent` lets a component that already fetched the data re-seed the cache
+    // without broadcasting, so it doesn't re-trigger its own refresh listener.
+    if (!silent) this._emit('requests-updated', this._cache);
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -198,7 +200,9 @@ class DataService {
   _applyServerResponse(id, serverReq) {
     this._cache.requests = this._cache.requests.map(r => {
       if (String(r.id) !== String(id) && r.request_code !== id) return r;
-      return { ...r, ...serverReq, canCancel: false, can_cancel: false };
+      // Preserve original request_code (doc number) — server response may not include it
+      const preservedCode = r.request_code || r.id;
+      return { ...r, ...serverReq, id: preservedCode, request_code: preservedCode, canCancel: false, can_cancel: false };
     });
     // Recalculate stats from enriched requests
     const all = this._cache.requests;

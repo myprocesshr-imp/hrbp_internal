@@ -66,10 +66,11 @@ function mapRequestRow(r, userRow) {
     created_at: r.created_at || '',
     updated_at: r.updated_at || '',
     // Allow cancellation only for active requests (not yet approved/rejected/cancelled)
-    can_cancel: r.status === 'submitted' || r.status === 'in-review',
+    // and only before HR has set an ETA (once HR acknowledges, employee can no longer cancel)
+    can_cancel: (r.status === 'submitted' || r.status === 'in-review') && !meta.eta_date,
     can_download: r.status === 'approved' && !!meta.cert_ready,
-    // Allow resubmit when rejected by HR or cancelled by employee
-    can_resubmit: r.status === 'rejected' || r.status === 'cancelled',
+    // Allow resubmit when rejected by HR (not when cancelled by employee)
+    can_resubmit: r.status === 'rejected' || (r.status === 'cancelled' && !meta.cancelled_by_employee),
     rejection_reason: meta.rejection_reason || '',
     // ── Certificate Builder fields ──────────────────────────────────────────
     cert_number: meta.cert_number || '',
@@ -185,6 +186,18 @@ export async function onRequest(context) {
 
   const json = (data, status = 200) =>
     new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
+
+  // GET list response — cacheable at the browser for a few seconds to absorb
+  // duplicate fetches (re-renders, rapid tab switches). Never `public`/
+  // `s-maxage`: the payload embeds employee personal data.
+  const jsonCached = (data) =>
+    new Response(JSON.stringify(data), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'private, max-age=15',
+      },
+    });
 
   // GET /api/requests — list requests with pagination & filters
   if (method === 'GET') {
@@ -305,7 +318,7 @@ export async function onRequest(context) {
       }
     } catch (_) {}
 
-    return json({
+    return jsonCached({
       requests: mapped,
       pagination: { page, limit, total, totalPages },
       stats: { avg_days: avgDays, success_rate: successRate, open_requests: openReqs },

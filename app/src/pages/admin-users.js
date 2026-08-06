@@ -105,7 +105,7 @@ export function renderAdminUsers() {
             <input id="user-show-inactive" type="checkbox" class="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary/20" />
             <span class="text-label-md text-on-surface-variant whitespace-nowrap">${t('users.showInactive')}</span>
           </label>
-          <select id="user-role-filter" class="bg-surface border border-outline-variant rounded-lg px-4 py-2.5 text-label-md text-on-surface-variant focus:ring-2 focus:ring-primary/10">
+          <select id="user-role-filter" class="bg-surface border border-outline-variant rounded-lg pl-4 pr-10 py-2.5 text-label-md text-on-surface-variant focus:ring-2 focus:ring-primary/10">
             <option value="all">${t('users.roleAll')}</option>
             <option value="admin">Admin</option>
             <option value="hrmanager">HR Manager</option>

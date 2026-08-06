@@ -88,6 +88,24 @@ input, select, textarea {
 }
 
 /* ========================================
+   KPI Card Click Animation
+   ======================================== */
+.kpi-card:active {
+  transform: scale(0.97);
+  transition: transform 0.1s ease;
+}
+
+.kpi-card.clicked {
+  animation: cardPulse 0.3s ease-out;
+}
+
+@keyframes cardPulse {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(0.95); }
+  100% { transform: scale(1); }
+}
+
+/* ========================================
    Scrollbar
    ======================================== */
 ::-webkit-scrollbar { width: 6px; }
@@ -167,6 +185,7 @@ input, select, textarea {
    ======================================== */
 @media (max-width: 767px) {
   .hide-mobile { display: none !important; }
+  #main-content { width: 100% !important; margin-left: 0 !important; }
 }
 
 /* ========================================

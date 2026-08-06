@@ -54,9 +54,20 @@ export function getRoleBadgeClass(role) {
  *  - mutates the matching element of the passed `users` array IN PLACE so the
  *    caller's re-render reflects the change.
  *
+ * Quota safety: the D1 write (PUT /users/:id) sets `updated_at = datetime('now')`
+ * server-side, which would otherwise make the caller's sync signature change on
+ * every render and re-trigger a hashchange → re-render loop forever. To prevent
+ * that:
+ *  - HRMS enrichment runs at most once per session per employee,
+ *  - the D1 PUT is skipped when the server already holds the target values,
+ *  - `changed` is only reported for fields that actually affect the rendered UI.
+ *
  * @returns {Promise<object|false>} the enriched/merged user when something
  *          changed, otherwise false.
  */
+
+/** Session-level guard: employee IDs already attempted for HRMS enrichment. */
+const _enrichAttempted = new Set();
 export async function syncCurrentUserFromList(users = []) {
   if (!users.length) return false;
   const cur = JSON.parse(localStorage.getItem('hrbp_user') || 'null');
@@ -70,35 +81,52 @@ export async function syncCurrentUserFromList(users = []) {
   if (idx === -1) return false;
 
   const fresh = users[idx];
-  const merged = { ...cur, ...fresh };
+  // Preserve locally-enriched English-name fields (HRMS back-fill) when the
+  // backend record doesn't carry them yet. Plain `{ ...cur, ...fresh }` lets a
+  // fresh record that lacks fname_e/lname_e/sex_id clobber the values we just
+  // enriched, so the sync never converges and the layout re-renders forever.
+  const merged = {
+    ...cur,
+    ...fresh,
+    fname_e: cur.fname_e || fresh.fname_e || '',
+    lname_e: cur.lname_e || fresh.lname_e || '',
+    sex_id: cur.sex_id || fresh.sex_id || '',
+    full_name_en: cur.full_name_en || fresh.full_name_en || '',
+  };
   let changed = cur.role !== merged.role
     || cur.full_name !== merged.full_name
     || cur.status !== merged.status;
 
-  // Back-fill English-name fields from HRMS for older accounts.
+  // Back-fill English-name fields from HRMS for older accounts. This only runs
+  // once per session per employee; if the server already has these values there
+  // is nothing to back-fill and the D1 PUT below must be skipped (otherwise the
+  // resulting updated_at change would loop the caller's re-render forever).
   if (!merged.fname_e || !merged.lname_e || !merged.sex_id) {
-    try {
-      const enriched = await enrichUserFromHrms(merged);
-      if (enriched) {
-        Object.assign(merged, enriched);
-        changed = true;
-      }
-    } catch (_) { /* leave as-is on failure */ }
+    if (!_enrichAttempted.has(merged.emp_id || merged.id)) {
+      _enrichAttempted.add(merged.emp_id || merged.id);
+      try {
+        const enriched = await enrichUserFromHrms(merged);
+        if (enriched) {
+          Object.assign(merged, enriched);
+          changed = true;
+        }
+      } catch (_) { /* leave as-is on failure */ }
+    }
   }
 
-  // Propagate any English-name data we now have into the shared mock-users
-  // store (used by getUsers() + Certificate Builder) — but only flag a change
-  // when the store actually lacks it, to avoid an endless re-render loop.
+  // Propagate English-name fields into the shared mock-users store, and only
+  // flag a re-render when the store actually changed. Comparing the store state
+  // before/after (instead of `!before`) keeps this convergent even when the
+  // store has no matching record — e.g. production accounts that never touched
+  // the mock store — so it can't re-trigger an endless re-render loop.
   if (merged.fname_e || merged.lname_e || merged.sex_id) {
     try {
       const before = readMockUserEnglishFields(merged);
-      if (!before
-        || before.fname_e !== (merged.fname_e || '')
-        || before.lname_e !== (merged.lname_e || '')
-        || before.sex_id !== (merged.sex_id || '')
-        || (merged.full_name_en && before.full_name_en !== merged.full_name_en)) {
-        changed = true;
-      }
+      const after = persistEnglishNameToMockUsers(merged);
+      const fieldsOf = (rec) => rec
+        ? `${rec.fname_e || ''}|${rec.lname_e || ''}|${rec.sex_id || ''}|${rec.full_name_en || ''}`
+        : null;
+      if (fieldsOf(before) !== fieldsOf(after)) changed = true;
     } catch (_) {}
   }
 
@@ -117,13 +145,21 @@ export async function syncCurrentUserFromList(users = []) {
   } catch (_) {}
 
   // Best-effort durability in D1 so the value survives across sessions/devices.
+  // Only write when the server actually lacks a value we now hold — an
+  // unconditional PUT would bump `updated_at` server-side and re-trigger the
+  // caller's sync loop on every render.
   try {
     const { updateUser } = await import('./api.js');
-    await updateUser(merged.id, {
-      fname_e: merged.fname_e || '',
-      lname_e: merged.lname_e || '',
-      sex_id: merged.sex_id || '',
-    });
+    const needsFname = !fresh.fname_e && merged.fname_e;
+    const needsLname = !fresh.lname_e && merged.lname_e;
+    const needsSex = !fresh.sex_id && merged.sex_id;
+    if (needsFname || needsLname || needsSex) {
+      await updateUser(merged.id, {
+        fname_e: merged.fname_e || '',
+        lname_e: merged.lname_e || '',
+        sex_id: merged.sex_id || '',
+      });
+    }
   } catch (_) {}
 
   return merged;

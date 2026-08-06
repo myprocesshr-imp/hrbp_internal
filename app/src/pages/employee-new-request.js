@@ -6,7 +6,7 @@ import { getCurrentUser } from '../mock-data.js';
 import { navigate } from '../router.js';
 import { getUsers, getHrmsEmployee, uploadFile, getPickupLocations, createRequest, getTemplates } from '../lib/api.js';
 import { loadAvatarForElement } from '../lib/avatar-helper.js';
-import { t } from '../lib/i18n.js';
+import { t, getLang } from '../lib/i18n.js';
 import { mapHrmsProfileFields } from '../lib/hrms-helper.js';
 
 const COUNTRIES = [
@@ -94,7 +94,7 @@ function formatStartDate(raw) {
   const isoMatch = String(raw).match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (isoMatch) {
     const months = t('month.long');
-    const year  = parseInt(isoMatch[1]) + 543;
+    const year  = getLang() === 'en' ? parseInt(isoMatch[1]) : parseInt(isoMatch[1]) + 543;
     const month = parseInt(isoMatch[2]) - 1;
     const day   = parseInt(isoMatch[3]);
     return `${day} ${months[month]} ${year}`;
@@ -116,7 +116,8 @@ function addWorkingDays(date, days) {
 
 function formatThaiDate(date) {
   const months = t('month.short');
-  return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear() + 543}`;
+  const year = getLang() === 'en' ? date.getFullYear() : date.getFullYear() + 543;
+  return `${date.getDate()} ${months[date.getMonth()]} ${year}`;
 }
 
 export function renderNewRequest() {
@@ -128,6 +129,8 @@ export function renderNewRequest() {
 
   const empCode    = user?.emp_id       || user?.empCode    || '';
   const fullName   = user?.full_name    || user?.nameDisplay || user?.name || '';
+  const fullNameEn = user?.fname_e ? `${user.fname_e} ${user.lname_e || ''}`.trim() : '';
+  const sexLabel   = user?.sex_id === '1' ? t('newReq.sexMale') : user?.sex_id === '2' ? t('newReq.sexFemale') : '';
   const position   = user?.position     || '';
   const department = user?.department   || '';
   const companyName= user?.company_name || user?.companyName || '-';
@@ -213,6 +216,14 @@ export function renderNewRequest() {
               <input id="field-full-name" class="w-full bg-surface-container-low border border-outline-variant/60 rounded-lg px-4 py-3 text-on-surface font-medium cursor-not-allowed" readonly type="text" value="${isOnBehalf ? '' : fullName}" placeholder="-" />
             </div>
             <div>
+              <label class="block text-label-md font-semibold text-on-surface-variant mb-2.5">${t('newReq.labelNameEn')}</label>
+              <input id="field-full-name-en" class="w-full bg-surface-container-low border border-outline-variant/60 rounded-lg px-4 py-3 text-on-surface font-medium cursor-not-allowed" readonly type="text" value="${isOnBehalf ? '' : fullNameEn}" placeholder="-" />
+            </div>
+            <div>
+              <label class="block text-label-md font-semibold text-on-surface-variant mb-2.5">${t('newReq.labelSex')}</label>
+              <input id="field-sex" class="w-full bg-surface-container-low border border-outline-variant/60 rounded-lg px-4 py-3 text-on-surface font-medium cursor-not-allowed" readonly type="text" value="${isOnBehalf ? '' : sexLabel}" placeholder="-" />
+            </div>
+            <div>
               <label class="block text-label-md font-semibold text-on-surface-variant mb-2.5">${t('common.position')}</label>
               <input id="field-position" class="w-full bg-surface-container-low border border-outline-variant/60 rounded-lg px-4 py-3 text-on-surface font-medium cursor-not-allowed" readonly type="text" value="${isOnBehalf ? '' : position}" placeholder="-" />
             </div>
@@ -233,7 +244,7 @@ export function renderNewRequest() {
           <!-- HR Officers -->
           <div class="mt-8 pt-6 border-t border-outline-variant/40">
             <label class="block text-label-md font-semibold text-on-surface-variant mb-4">${t('newReq.labelSelectHr')}</label>
-            <div class="overflow-x-auto rounded-xl border border-outline-variant/40">
+            <div class="overflow-x-auto rounded-xl border border-outline-variant/40 hidden md:block">
               <table class="w-full text-left">
                 <thead class="bg-surface-container-low border-b border-outline-variant/40 text-label-sm text-on-surface-variant font-bold">
                   <tr>
@@ -254,6 +265,12 @@ export function renderNewRequest() {
                   </tr>
                 </tbody>
               </table>
+            </div>
+            <div id="hr-officers-cards" class="md:hidden space-y-3">
+              <div class="text-center text-on-surface-variant py-4">
+                <span class="material-symbols-outlined animate-spin text-[20px] text-primary align-middle">sync</span>
+                <span class="text-label-sm ml-2">${t('newReq.loadingHr')}</span>
+              </div>
             </div>
           </div>
         </section>
@@ -361,7 +378,7 @@ export function renderNewRequest() {
             <!-- Salary Info only (Language is determined by selected template) -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-8 pt-2">
               <div>
-                <label class="block text-label-md font-semibold text-on-surface-variant mb-2.5">${t('newReq.labelSalary')}</label>
+                <label class="block text-label-md font-semibold text-on-surface-variant mb-2.5">${t('newReq.labelSalary')} <span class="text-label-xs font-normal text-outline">${t('newReq.salaryAutoHint')}</span></label>
                 <div class="flex items-center gap-6 py-3">
                   <label class="flex items-center gap-2.5 cursor-pointer">
                     <input class="w-5 h-5 text-primary border-outline-variant focus:ring-primary/20 transition-all" name="salary" type="radio" value="yes" id="salary-yes" />
@@ -387,8 +404,12 @@ export function renderNewRequest() {
         <section id="delivery-section" class="bg-white p-6 md:p-8 rounded-xl card-shadow border border-outline-variant/40">
           <div class="flex items-center gap-4 mb-8">
             <span class="h-9 w-9 rounded-full bg-primary-fixed flex items-center justify-center text-primary font-bold text-lg">3</span>
-            <h3 class="text-headline-md text-primary tracking-tight">${t('newReq.sectionDelivery')}</h3>
+            <h3 class="text-headline-md text-primary tracking-tight">${t('newReq.sectionDelivery')} <span class="text-error">*</span></h3>
           </div>
+          <p class="text-label-sm text-on-surface-variant mb-4 flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-[16px] text-outline">info</span>
+            ${t('newReq.deliveryHint')}
+          </p>
           <div class="space-y-4">
             <!-- Digital E-Certificate (recommend) -->
             <label class="cursor-pointer block">
@@ -590,7 +611,7 @@ export function renderNewRequest() {
     <div id="toast-notification" class="fixed inset-0 z-[200] flex items-center justify-center hidden">
       <div class="absolute inset-0 bg-black/30"></div>
       <div class="relative flex flex-col items-center gap-3 bg-surface-container-high border border-outline-variant px-8 py-6 rounded-2xl shadow-2xl text-label-md font-bold min-w-[300px] max-w-sm animate-[fadeIn_0.2s_ease-out]">
-        <span id="toast-icon" class="material-symbols-outlined text-[36px] text-primary">check_circle</span>
+        <span id="toast-icon" class="material-symbols-outlined text-[36px] text-green-500">check_circle</span>
         <span id="toast-message" class="text-on-surface text-center">${t('common.success')}</span>
       </div>
     </div>
@@ -651,12 +672,16 @@ export async function initNewRequest(container) {
   function fillEmployeeFields(emp) {
     targetEmployee = emp;
     const nameField = container.querySelector('#field-full-name');
+    const nameEnField = container.querySelector('#field-full-name-en');
+    const sexField = container.querySelector('#field-sex');
     const posField  = container.querySelector('#field-position');
     const deptField = container.querySelector('#field-department');
     const compField = container.querySelector('#field-company');
     const dateField = container.querySelector('#field-start-date');
     const nameBadge = container.querySelector('#on-behalf-name-badge');
     if (nameField) nameField.value = emp.full_name || emp.name || '';
+    if (nameEnField) nameEnField.value = emp.fname_e ? `${emp.fname_e} ${emp.lname_e || ''}`.trim() : '';
+    if (sexField) sexField.value = emp.sex_id === '1' ? t('newReq.sexMale') : emp.sex_id === '2' ? t('newReq.sexFemale') : '';
     if (posField)  posField.value  = emp.position || '';
     if (deptField) deptField.value = emp.department || '';
     if (compField) compField.value = emp.company_name || emp.companyName || '';
@@ -735,13 +760,15 @@ export async function initNewRequest(container) {
   }
 
   // ── Toast helper ──────────────────────────────────────────────
-  const showToast = (msg, icon = 'check_circle') => {
-    const t = container.querySelector('#toast-notification');
-    if (!t) return;
+  const showToast = (msg, icon = 'check_circle', iconColor = 'text-green-500') => {
+    const toastEl = container.querySelector('#toast-notification');
+    if (!toastEl) return;
     container.querySelector('#toast-message').textContent = msg;
-    container.querySelector('#toast-icon').textContent = icon;
-    t.classList.remove('hidden');
-    setTimeout(() => t.classList.add('hidden'), 3000);
+    const iconEl = container.querySelector('#toast-icon');
+    iconEl.textContent = icon;
+    iconEl.className = `material-symbols-outlined text-[36px] ${iconColor}`;
+    toastEl.classList.remove('hidden');
+    setTimeout(() => toastEl.classList.add('hidden'), 3000);
   };
 
   // ── Conditional Fields: Purpose ────────────────────────────────
@@ -828,7 +855,7 @@ export async function initNewRequest(container) {
         pickupContainer.innerHTML = locations.map((loc, i) => `
           <label class="cursor-pointer">
             <input type="radio" name="pickup_location" value="${loc.name}" ${i === 0 ? 'checked' : ''} class="peer sr-only" />
-            <div class="flex items-center gap-3 p-4 border border-outline-variant rounded-xl peer-checked:border-primary peer-checked:bg-primary-fixed/10 hover:bg-surface-container-low transition-all">
+            <div class="flex items-center gap-3 p-4 border border-outline-variant rounded-xl peer-checked:border-primary peer-checked:bg-primary/10 peer-checked:shadow-sm hover:bg-surface-container-low transition-all">
               <span class="material-symbols-outlined text-on-surface-variant peer-checked:text-primary">location_on</span>
               <div>
                 <p class="text-label-md font-bold text-on-surface">${loc.name}</p>
@@ -1007,23 +1034,22 @@ export async function initNewRequest(container) {
       </div>
     `;
     fileList.appendChild(li);
-    li.querySelector('.btn-remove-file').addEventListener('click', () => {
+    const removeHandler = () => {
       const idx = uploadedFiles.findIndex(f => f.fileId === fileId);
       if (idx !== -1) uploadedFiles.splice(idx, 1);
       li.remove();
-    });
+    };
+    li.querySelector('.btn-remove-file').addEventListener('click', removeHandler);
     return fileId;
   }
 
   function handleFiles(files) {
-    const MAX_TOTAL = 20 * 1024 * 1024;
-    let currentTotal = uploadedFiles.reduce((sum, f) => sum + f.size, 0);
+    const MAX_SINGLE = 10 * 1024 * 1024;
     for (const file of files) {
-      if (currentTotal + file.size > MAX_TOTAL) {
+      if (file.size > MAX_SINGLE) {
         alert(t('newReq.fileSizeAlert'));
-        break;
+        continue;
       }
-      currentTotal += file.size;
       const fileId = addFileItem(file.name, file.size);
       uploadedFiles.push({ file, fileId, size: file.size, name: file.name });
     }
@@ -1167,16 +1193,32 @@ export async function initNewRequest(container) {
       }
 
       submitBtn.disabled = true;
-      submitBtn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[20px]">sync</span> ' + t('newReq.submitting');
+      const totalFiles = uploadedFiles.length;
+      if (totalFiles > 0) {
+        submitBtn.innerHTML = `<span class="material-symbols-outlined animate-spin text-[20px]">sync</span> ${t('newReq.uploading')} 0/${totalFiles}`;
+      } else {
+        submitBtn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[20px]">sync</span> ' + t('newReq.submitting');
+      }
 
       try {
         const uploadedKeys = [];
-        for (const item of uploadedFiles) {
-          const statusEl = document.getElementById(item.fileId)?.querySelector('.file-status');
-          if (statusEl) statusEl.innerHTML = '<span class="text-primary text-label-xs animate-pulse">' + t('newReq.uploading') + '</span>';
-          const result = await uploadFile(item.file, 'supporting-docs');
-          uploadedKeys.push({ key: result.key, name: result.name, size: result.size });
-          if (statusEl) statusEl.innerHTML = '<span class="text-success text-label-xs">' + t('newReq.uploadSuccess') + '</span>';
+        for (let i = 0; i < uploadedFiles.length; i++) {
+          const item = uploadedFiles[i];
+          const li = document.getElementById(item.fileId);
+          const statusEl = li?.querySelector('.file-status');
+          if (statusEl) statusEl.innerHTML = '<span class="text-primary text-label-xs flex items-center gap-1"><span class="material-symbols-outlined text-[14px] animate-spin">sync</span> ' + t('newReq.uploading') + '</span>';
+          submitBtn.innerHTML = `<span class="material-symbols-outlined animate-spin text-[20px]">sync</span> ${t('newReq.uploading')} ${i + 1}/${totalFiles}`;
+          try {
+            const result = await uploadFile(item.file, 'supporting-docs');
+            uploadedKeys.push({ key: result.key, name: result.name, size: result.size });
+            if (statusEl) statusEl.innerHTML = '<span class="text-green-600 text-label-xs flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">check_circle</span> ' + t('newReq.uploadSuccess') + '</span>';
+          } catch (uploadErr) {
+            console.error('File upload error:', uploadErr);
+            if (statusEl) statusEl.innerHTML = '<span class="text-error text-label-xs flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">error</span> ' + t('common.error') + '</span>';
+          }
+        }
+        if (totalFiles > 0) {
+          submitBtn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[20px]">sync</span> ' + t('newReq.submitting');
         }
 
         const selectedTplEl = container.querySelector('.doc-type-radio:checked');
@@ -1192,9 +1234,10 @@ export async function initNewRequest(container) {
         const today = new Date();
         const formatThaiDateShort = (d) => {
         const months = t('month.short');
-        return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear() + 543}`;
+        const year = getLang() === 'en' ? d.getFullYear() : d.getFullYear() + 543;
+        return `${d.getDate()} ${months[d.getMonth()]} ${year}`;
         };
-        const dateStr = formatThaiDateShort(today);
+        const dateStr = today.toISOString().split('T')[0];
         const idStr = 'EC-' + today.getFullYear() + String(today.getMonth() + 1).padStart(2, '0') + String(today.getDate()).padStart(2, '0') + '-' + String(Math.floor(Math.random() * 9000) + 1000);
         const curUser = getCurrentUser();
         const selectedHrRadio = container.querySelector('input[name="selected_hr"]:checked');
@@ -1282,13 +1325,13 @@ export async function initNewRequest(container) {
         console.log('Uploaded files:', uploadedKeys);
 
         closePreview();
-        showToast(t('newReq.submitSuccess'), 'check_circle');
+        showToast(t('newReq.submitSuccess'), 'check_circle', 'text-green-500');
         // Redirect back: admin/requests if HR submitted on behalf, else employee requests
         const redirectPath = isOnBehalf ? '/admin/requests' : '/employee/requests';
         setTimeout(() => navigate(redirectPath), 1800);
       } catch (err) {
         console.error('Submit error:', err);
-        showToast(t('common.error') + ': ' + err.message, 'error');
+        showToast(t('common.error') + ': ' + err.message, 'error', 'text-error');
       } finally {
         submitBtn.disabled = false;
         submitBtn.innerHTML = '<span class="material-symbols-outlined">send</span> ' + t('newReq.previewSubmitBtn');
@@ -1335,6 +1378,33 @@ export async function initNewRequest(container) {
           `;
         }).join('');
 
+        // Mobile cards
+        const cardsContainer = container.querySelector('#hr-officers-cards');
+        if (cardsContainer) {
+          cardsContainer.innerHTML = hrList.map((officer, index) => {
+            const buDisplay = Array.isArray(officer.responsible_bu)
+              ? officer.responsible_bu.map(b => `<span class="inline-block px-2 py-0.5 bg-primary-fixed/20 text-primary text-xs rounded border border-primary/10 mr-1 mb-1 font-semibold">${b}</span>`).join('')
+              : (officer.responsible_bu ? `<span class="inline-block px-2 py-0.5 bg-primary-fixed/20 text-primary text-xs rounded border border-primary/10 font-semibold">${officer.responsible_bu}</span>` : '-');
+            const initials = (officer.full_name || 'HR').substring(0, 2);
+            return `
+              <label class="block cursor-pointer">
+                <input type="radio" name="selected_hr" value="${officer.emp_id}" ${index === 0 ? 'checked' : ''} class="peer sr-only" />
+                <div class="p-4 border border-outline-variant rounded-xl peer-checked:border-primary peer-checked:bg-primary/5 hover:bg-surface-container-low transition-all">
+                  <div class="flex items-center gap-3 mb-2">
+                    <div class="w-10 h-10 rounded-full bg-primary-fixed text-primary flex items-center justify-center font-bold text-sm shrink-0">${initials}</div>
+                    <div class="min-w-0 flex-1">
+                      <p class="text-label-md font-bold text-on-surface truncate">${officer.full_name || '-'}</p>
+                      <p class="text-label-xs text-outline-variant">${officer.phone || '-'}</p>
+                    </div>
+                    <span class="material-symbols-outlined text-primary text-[20px] peer-checked:text-primary">radio_button_checked</span>
+                  </div>
+                  <div class="flex flex-wrap gap-1">${buDisplay}</div>
+                </div>
+              </label>
+            `;
+          }).join('');
+        }
+
         tbody.querySelectorAll('img[data-avatar-emp-id]').forEach(img => {
           loadAvatarForElement(img, img.getAttribute('data-avatar-emp-id'));
         });
@@ -1348,10 +1418,14 @@ export async function initNewRequest(container) {
         });
       } else {
         tbody.innerHTML = `<tr><td colspan="4" class="p-8 text-center text-on-surface-variant font-medium">${t('newReq.noHr')}</td></tr>`;
+        const cardsContainer = container.querySelector('#hr-officers-cards');
+        if (cardsContainer) cardsContainer.innerHTML = `<div class="text-center text-on-surface-variant py-4 text-label-sm">${t('newReq.noHr')}</div>`;
       }
     } catch (err) {
       console.error('Error fetching HR officers:', err);
       tbody.innerHTML = `<tr><td colspan="4" class="p-8 text-center text-error font-medium">${t('newReq.loadError')}</td></tr>`;
+      const cardsContainer = container.querySelector('#hr-officers-cards');
+      if (cardsContainer) cardsContainer.innerHTML = `<div class="text-center text-error py-4 text-label-sm">${t('newReq.loadError')}</div>`;
     }
   }
 

@@ -7,6 +7,13 @@ import { loadAvatarForElement } from '../lib/avatar-helper.js';
 import { t, renderLangSwitcher, initLangSwitcher } from '../lib/i18n.js';
 import { getRoleLabel } from '../lib/role-helper.js';
 
+// Signature of the last user payload that triggered a sync-driven re-render.
+// Guards against an endless hashchange → re-render loop if a sync ever reports
+// a change with an identical user (e.g. production data where enrichment can't
+// be persisted back to the API, so it can never converge on its own).
+let _lastSyncedSignature = null;
+let _lastSyncDispatchAt = 0;
+
 const adminMenuItems = [
   { icon: 'home', labelKey: 'nav.requests', route: '/admin/requests', roles: ['admin', 'hrmanager', 'hrbp'] },
   { icon: 'dashboard', labelKey: 'nav.dashboard', route: '/admin/dashboard', roles: ['admin', 'hrmanager', 'hrbp'] },
@@ -23,8 +30,13 @@ export function renderAdminLayout(contentHTML) {
   const isCollapsed = localStorage.getItem('sidebar-collapsed') === 'true';
 
   return `
+    <style>
+      @media (max-width: 767px) {
+        #main-content { width: 100% !important; margin-left: 0 !important; }
+      }
+    </style>
     <div class="flex min-h-screen overflow-x-hidden">
-      <!-- Sidebar -->
+      <!-- Sidebar (desktop) -->
       <aside id="sidebar" class="hidden md:flex flex-col h-screen fixed left-0 top-0 pb-8 bg-surface-container-low border-r border-outline-variant z-50 transition-[width,padding] duration-300 ease-in-out ${isCollapsed ? 'w-20 px-2 pt-4' : 'w-64 px-4 pt-6'}">
         <!-- Sidebar Header / Brand -->
         <div class="flex items-center justify-between mb-6 px-2">
@@ -79,11 +91,59 @@ export function renderAdminLayout(contentHTML) {
       </aside>
 
       <!-- Main Content Area -->
-      <main id="main-content" class="p-4 md:p-8 min-h-screen pt-8 pb-20 transition-[width,margin-left] duration-300 ease-in-out" style="width: ${isCollapsed ? 'calc(100% - 80px)' : 'calc(100% - 256px)'}; margin-left: ${isCollapsed ? '80px' : '256px'};">
+      <main id="main-content" class="p-4 md:p-8 min-h-screen pt-14 md:pt-8 pb-20 md:pb-8 transition-[width,margin-left] duration-300 ease-in-out md:block" style="width: ${isCollapsed ? 'calc(100% - 80px)' : 'calc(100% - 256px)'}; margin-left: ${isCollapsed ? '80px' : '256px'};">
         <div class="page-enter">
           ${contentHTML}
         </div>
       </main>
+
+      <!-- Mobile Top Bar -->
+      <div class="md:hidden fixed top-0 left-0 right-0 h-14 bg-surface-container-low border-b border-outline-variant flex items-center justify-between px-4 z-40 shadow-sm">
+        <div class="flex items-center gap-3">
+          <button id="mobile-menu-btn" class="w-10 h-10 rounded-lg flex items-center justify-center hover:bg-surface-container-high text-on-surface-variant transition-colors">
+            <span class="material-symbols-outlined">menu</span>
+          </button>
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-primary text-[22px]">corporate_fare</span>
+            <span class="text-[15px] font-display font-bold text-primary">HRBP</span>
+          </div>
+        </div>
+        <button id="mobile-profile-btn" class="w-9 h-9 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container border border-outline-variant shrink-0" title="${t('nav.myInfo')}">
+          <span class="material-symbols-outlined text-[20px]">person</span>
+        </button>
+      </div>
+
+      <!-- Mobile Sidebar Overlay -->
+      <div id="mobile-sidebar-overlay" class="md:hidden fixed inset-0 bg-black/50 z-50 hidden"></div>
+      <aside id="mobile-sidebar" class="md:hidden fixed left-0 top-0 h-full w-72 bg-surface-container-low border-r border-outline-variant z-50 flex flex-col pt-4 pb-6 transition-transform duration-300 ease-in-out -translate-x-full">
+        <div class="flex items-center justify-between mb-6 px-4">
+          <div class="flex items-center gap-3">
+            <span class="material-symbols-outlined text-primary text-[24px]">corporate_fare</span>
+            <span class="text-[16px] font-display text-primary font-bold">HRBP Internal</span>
+          </div>
+          <button id="mobile-sidebar-close" class="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-surface-container-high text-outline transition-colors">
+            <span class="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
+        <nav class="flex-1 flex flex-col gap-1 overflow-y-auto px-3">
+          ${adminMenuItems.filter(item => item.roles.includes(user?.role)).map(item => {
+            const isActive = currentPath === item.route;
+            const label = t(item.labelKey);
+            return `
+              <a class="flex items-center gap-3 ${isActive ? 'bg-secondary-container text-on-secondary-container font-bold rounded-lg' : 'text-on-surface-variant hover:bg-surface-container-high rounded-lg'} px-4 py-3 transition-all duration-150 cursor-pointer"
+                 data-navigate="${item.route}">
+                <span class="material-symbols-outlined shrink-0">${item.icon}</span>
+                <span class="text-label-md">${label}</span>
+              </a>`;
+          }).join('')}
+        </nav>
+        <div class="border-t border-outline-variant pt-3 px-4 mt-auto">
+          <button id="mobile-logout-btn" class="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-outline-variant text-on-surface-variant hover:bg-error-container hover:text-error transition-colors text-label-sm font-bold">
+            <span class="material-symbols-outlined text-[18px]">logout</span>
+            ${t('nav.logout')}
+          </button>
+        </div>
+      </aside>
     </div>
 
     <!-- Admin Profile Info Modal -->
@@ -173,7 +233,24 @@ export async function initAdminLayout(container) {
       const synced = JSON.parse(localStorage.getItem('hrbp_user') || 'null');
       if (synced) {
         setCurrentUser(synced);
-        window.dispatchEvent(new Event('hashchange'));
+        // Build a signature from the fields that actually drive the rendered
+        // UI — NOT the whole user object, which includes server-managed fields
+        // like `updated_at` that change on every PUT and would re-trigger this
+        // dispatch forever.
+        const signature = JSON.stringify({
+          role: synced.role,
+          full_name: synced.full_name,
+          status: synced.status,
+          fname_e: synced.fname_e,
+          lname_e: synced.lname_e,
+          sex_id: synced.sex_id,
+        });
+        const now = Date.now();
+        if (signature !== _lastSyncedSignature && now - _lastSyncDispatchAt > 1500) {
+          _lastSyncedSignature = signature;
+          _lastSyncDispatchAt = now;
+          window.dispatchEvent(new Event('hashchange'));
+        }
       }
     }
   } catch (_) {}
@@ -294,5 +371,36 @@ export async function initAdminLayout(container) {
       }
     });
   }
+
+  // ── Mobile sidebar ──
+  const mobileMenuBtn = container.querySelector('#mobile-menu-btn');
+  const mobileSidebar = container.querySelector('#mobile-sidebar');
+  const mobileOverlay = container.querySelector('#mobile-sidebar-overlay');
+  const mobileSidebarClose = container.querySelector('#mobile-sidebar-close');
+  const mobileProfileBtn = container.querySelector('#mobile-profile-btn');
+  const mobileLogoutBtn = container.querySelector('#mobile-logout-btn');
+
+  const openMobileSidebar = () => {
+    if (!mobileSidebar || !mobileOverlay) return;
+    mobileOverlay.classList.remove('hidden');
+    mobileSidebar.classList.remove('-translate-x-full');
+    document.body.style.overflow = 'hidden';
+  };
+  const closeMobileSidebar = () => {
+    mobileSidebar?.classList.add('-translate-x-full');
+    mobileOverlay?.classList.add('hidden');
+    document.body.style.overflow = '';
+  };
+
+  mobileMenuBtn?.addEventListener('click', openMobileSidebar);
+  mobileOverlay?.addEventListener('click', closeMobileSidebar);
+  mobileSidebarClose?.addEventListener('click', closeMobileSidebar);
+  mobileProfileBtn?.addEventListener('click', () => { openModal(); });
+  mobileLogoutBtn?.addEventListener('click', () => { closeMobileSidebar(); performLogout(); });
+
+  // Close mobile sidebar on navigation
+  mobileSidebar?.querySelectorAll('a[data-navigate]').forEach(a => {
+    a.addEventListener('click', closeMobileSidebar);
+  });
 }
 

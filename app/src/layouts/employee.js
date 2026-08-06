@@ -197,14 +197,11 @@ export function initEmployeeLayout(container) {
     loadAvatarForElement(img, empId);
   });
 
-  // Menu click handler
+  // Menu click handler — just persist active label, router handles navigation
   const menuItems = container.querySelectorAll('[data-menu-label]');
   menuItems.forEach(item => {
-    item.addEventListener('click', (e) => {
-      const label = item.getAttribute('data-menu-label');
-      localStorage.setItem('active-menu-employee', label);
-      // Force re-render to update the active state immediately
-      window.dispatchEvent(new Event('hashchange'));
+    item.addEventListener('click', () => {
+      localStorage.setItem('active-menu-employee', item.getAttribute('data-menu-label'));
     });
   });
 

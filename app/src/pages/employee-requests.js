@@ -11,12 +11,14 @@ import {
   isDownloadWindowOpen,
 } from '../lib/download-policy.js';
 import { dataService } from '../lib/data-service.js';
-import { getHrmsEmployee } from '../lib/api.js';
+import { getHrmsEmployee, getEmployeeRequests } from '../lib/api.js';
 import { mapHrmsProfileFields } from '../lib/hrms-helper.js';
+import { loadAvatarForElement } from '../lib/avatar-helper.js';
 
 let currentRequestsData = { requests: [], pagination: { page: 1, limit: 10, total: 0, totalPages: 0 } };
 let currentSearch = '';
 let currentStatus = '';
+let currentPeriod = '';
 
 // Base path for employee routes
 function getRequestBase() {
@@ -102,7 +104,15 @@ function renderTableRows(visibleRequests) {
     const attachments = (() => {
       try { return JSON.parse(req.supporting_docs || '[]'); } catch { return []; }
     })();
-    const dateStr = req.date || req.created_at || '';
+    const dateStr = (() => {
+      const raw = req.date || req.created_at || '';
+      const iso = String(raw).match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (iso) {
+        const d = new Date(parseInt(iso[1], 10), parseInt(iso[2], 10) - 1, parseInt(iso[3], 10));
+        return formatThaiDate(d);
+      }
+      return raw;
+    })();
     const typeStr = req.type || req.purpose || '';
     // ── Created-by label (on-behalf = HR name, self = requester name) ──
     const createdByName = req.created_by_name
@@ -125,13 +135,14 @@ function renderTableRows(visibleRequests) {
       if (parts.length === 3) {
         const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
         const months = t('month.short');
-        return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear() + 543}`;
+        const etaYear = getLang() === 'en' ? d.getFullYear() : d.getFullYear() + 543;
+        return `${d.getDate()} ${months[d.getMonth()]} ${etaYear}`;
       }
       return req.eta_date;
     })() : '';
     return `
       <tr class="hover:bg-surface-container-low transition-colors cursor-pointer request-row" data-id="${req.id || req.request_code}" data-status="${req.status}" data-type="${typeStr}" data-date="${dateStr}" data-status-label="${effectiveLabel}" data-attachments='${JSON.stringify(attachments)}' data-eta="${req.eta_date || ''}" data-cert-ready="${req.cert_ready ? 'true' : ''}">
-        <td class="px-6 py-5 text-label-md font-bold text-primary">${req.id || req.request_code}</td>
+        <td class="px-6 py-5 text-label-md font-bold text-primary whitespace-normal break-words">${req.id || req.request_code}${req.cert_number ? `<br><span class="text-label-xs text-outline font-normal">${req.cert_number}</span>` : ''}</td>
         <td class="px-6 py-5 text-body-md text-on-surface-variant">${dateStr}</td>
         <td class="px-6 py-5 text-body-md text-on-surface whitespace-normal break-words">${typeStr}${createdByLabel}</td>
         <td class="px-6 py-5">${attachments.length > 0 ? `<span class="inline-flex items-center gap-1 text-label-sm text-primary"><span class="material-symbols-outlined text-[16px]">attach_file</span>${attachments.length} ${t('employeeReq.fileCount')}</span>` : '<span class="text-label-sm text-outline">-</span>'}</td>
@@ -161,6 +172,74 @@ function renderTableRows(visibleRequests) {
           </div>
         </td>
       </tr>
+    `;
+  }).join('');
+}
+
+function renderCards(visibleRequests) {
+  const user = getCurrentUser();
+  if (!visibleRequests || visibleRequests.length === 0) {
+    return `<div class="px-6 py-16 text-center text-on-surface-variant">${t('common.noResults')}</div>`;
+  }
+  return visibleRequests.map(reqRaw => {
+    const req = enrichRequestDownloadAccess(reqRaw);
+    const attachments = (() => {
+      try { return JSON.parse(req.supporting_docs || '[]'); } catch { return []; }
+    })();
+    const dateStr = (() => {
+      const raw = req.date || req.created_at || '';
+      const iso = String(raw).match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (iso) {
+        const d = new Date(parseInt(iso[1], 10), parseInt(iso[2], 10) - 1, parseInt(iso[3], 10));
+        return formatThaiDate(d);
+      }
+      return raw;
+    })();
+    const typeStr = req.type || req.purpose || '';
+    const hasEta = !!req.eta_date;
+    const isCertReady = !!req.cert_ready;
+    const statusLabelMap = { 'submitted': t('status.submitted'), 'in-review': t('status.inReview'), 'approved': t('status.approved'), 'rejected': t('status.rejected'), 'cancelled': t('status.cancelled') };
+    const effectiveLabel = isCertReady ? t('status.approved') : (req.status === 'in-review' && hasEta ? t('status.inProgress') : (isEmployeeCancelled(req) ? t('status.cancelled') : (statusLabelMap[req.status] || req.statusLabel || req.status_label || req.status)));
+    const effectiveStatus = isCertReady || req.status === 'approved' ? 'approved' : (isEmployeeCancelled(req) ? 'cancelled' : (req.status === 'rejected' ? 'rejected' : (hasEta ? 'in-review-eta' : req.status)));
+    const etaDisplay = hasEta ? (() => {
+      const parts = req.eta_date.split('-');
+      if (parts.length === 3) {
+        const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        const months = t('month.short');
+        const etaYear = getLang() === 'en' ? d.getFullYear() : d.getFullYear() + 543;
+        return `${d.getDate()} ${months[d.getMonth()]} ${etaYear}`;
+      }
+      return req.eta_date;
+    })() : '';
+    const id = req.id || req.request_code;
+    return `
+      <div class="p-4 hover:bg-surface-container-low transition-colors cursor-pointer request-card" data-id="${id}" data-status="${req.status}" data-type="${typeStr}" data-date="${dateStr}" data-status-label="${effectiveLabel}" data-attachments='${JSON.stringify(attachments)}' data-eta="${req.eta_date || ''}" data-cert-ready="${req.cert_ready ? 'true' : ''}">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-label-md font-bold text-primary">${id}${req.cert_number ? ` <span class="text-label-xs text-outline font-normal">${req.cert_number}</span>` : ''}</span>
+          ${getStatusBadge(effectiveStatus, effectiveLabel)}
+        </div>
+        <p class="text-body-md text-on-surface mb-1">${typeStr}</p>
+        <div class="flex items-center justify-between text-label-sm text-on-surface-variant">
+          <span>${dateStr}</span>
+          ${etaDisplay ? `<span class="text-primary font-bold">${etaDisplay}</span>` : ''}
+          ${attachments.length > 0 ? `<span class="inline-flex items-center gap-1 text-primary"><span class="material-symbols-outlined text-[14px]">attach_file</span>${attachments.length}</span>` : ''}
+        </div>
+        <div class="flex items-center gap-2 mt-3">
+          ${(req.can_download || req.canDownload) ? `
+            <button class="flex-1 px-3 py-2 bg-primary text-on-primary rounded-lg text-label-sm font-medium hover:opacity-90 transition-opacity btn-download text-center" data-id="${id}">
+              <span class="material-symbols-outlined text-[16px] align-middle">download</span> ${t('common.download')}
+            </button>
+          ` : ''}
+          ${req.can_cancel || req.canCancel ? `
+            <button class="flex-1 flex items-center justify-center gap-1 px-3 py-2 border border-error text-error rounded-lg text-label-sm font-medium hover:bg-error-container/20 transition-colors btn-cancel" data-id="${req.request_code || req.id}">
+              <span class="material-symbols-outlined text-[16px]">cancel</span> ${t('common.cancel')}
+            </button>
+          ` : ''}
+          ${req.can_resubmit || req.canResubmit ? `
+            <button class="flex-1 px-3 py-2 border border-primary text-primary rounded-lg text-label-sm font-medium hover:bg-primary/5 transition-colors btn-resubmit text-center" data-id="${id}">${t('common.resubmit')}</button>
+          ` : ''}
+        </div>
+      </div>
     `;
   }).join('');
 }
@@ -205,7 +284,7 @@ function buildStepsForRequest(req) {
 
   const reviewStep = getReviewStepInfo(req, statusIndex);
   const allSteps = [
-    { key: 'submitted', icon: 'send',        label: t('step.submitted'),           date: req.date || '' },
+    { key: 'submitted', icon: 'send',        label: t('step.submitted'),           date: formatStoredDate(req.date) || '' },
     { key: 'in-review', icon: 'manage_search', label: t('step.review'),    date: reviewStep.date, subdate: reviewStep.subdate || '' },
     { key: 'approved',  icon: 'task_alt',    label: t('step.approve'), date: req.status === 'approved' ? t('employeeReq.stepDateApproved') : req.status === 'rejected' ? t('employeeReq.stepDateRejected') : t('employeeReq.stepDatePending') },
     { key: 'done',      icon: 'inventory',   label: t('step.delivery'),      date: req.status === 'approved' ? t('employeeReq.stepDateReady') : t('employeeReq.stepDatePending') },
@@ -232,6 +311,77 @@ function buildStepsForRequest(req) {
   });
 }
 
+/** Filter requests by current status + search + period */
+function filterRequests(requests, status, search, period) {
+  let visible = requests;
+  if (status === 'cancelled') {
+    visible = visible.filter(r => isEmployeeCancelled(r));
+  } else if (status === 'in-progress') {
+    visible = visible.filter(r => r.status === 'in-review' && r.eta_date);
+  } else if (status === 'in-review') {
+    visible = visible.filter(r => r.status === 'in-review' && !r.eta_date);
+  } else if (status) {
+    visible = visible.filter(r => r.status === status);
+  }
+  if (search) {
+    visible = visible.filter(r => {
+      const id = (r.id || r.request_code || '').toLowerCase();
+      const type = (r.type || r.purpose || '').toLowerCase();
+      const name = (r.full_name || r.employee_name || '').toLowerCase();
+      return id.includes(search) || type.includes(search) || name.includes(search);
+    });
+  }
+  // Period filter
+  if (period && period !== 'all') {
+    const now = new Date();
+    let cutoff = null;
+    if (period === '30d' || period === '') {
+      cutoff = new Date(now);
+      cutoff.setDate(cutoff.getDate() - 30);
+    } else if (period === '3m') {
+      cutoff = new Date(now);
+      cutoff.setMonth(cutoff.getMonth() - 3);
+    } else if (/^\d{4}$/.test(period)) {
+      // Specific year — keep requests from that year
+      const year = parseInt(period);
+      visible = visible.filter(r => {
+        const d = parseRequestDate(r.date || r.created_at);
+        return d && d.getFullYear() === year;
+      });
+      return visible;
+    }
+    if (cutoff) {
+      visible = visible.filter(r => {
+        const d = parseRequestDate(r.date || r.created_at);
+        return d && d >= cutoff;
+      });
+    }
+  }
+  return visible;
+}
+
+/** Parse date string (DD Mon YYYY or ISO) into Date */
+function parseRequestDate(dateStr) {
+  if (!dateStr) return null;
+  // ISO format: 2026-01-15
+  const iso = String(dateStr).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return new Date(parseInt(iso[1]), parseInt(iso[2]) - 1, parseInt(iso[3]));
+  // Thai short format: "15 ม.ค. 2568"
+  const months = { 'ม.ค.': 0, 'ก.พ.': 1, 'มี.ค.': 2, 'เม.ย.': 3, 'พ.ค.': 4, 'มิ.ย.': 5, 'ก.ค.': 6, 'ส.ค.': 7, 'ก.ย.': 8, 'ต.ค.': 9, 'พ.ย.': 10, 'ธ.ค.': 11,
+    'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5, 'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11 };
+  const parts = dateStr.trim().split(/\s+/);
+  if (parts.length >= 3) {
+    const day = parseInt(parts[0]);
+    const mon = months[parts[1]];
+    let year = parseInt(parts[2]);
+    if (!isNaN(day) && mon !== undefined && !isNaN(year)) {
+      if (year > 2000) year -= 543; // Convert BE to CE
+      return new Date(year, mon, day);
+    }
+  }
+  return null;
+}
+
 export function renderEmployeeRequests(data) {
   const user = getCurrentUser();
   currentRequestsData = data || { requests: [], pagination: { page: 1, limit: 10, total: 0, totalPages: 0 }, stats: { avg_days: 0, success_rate: 0, open_requests: 0 } };
@@ -244,17 +394,15 @@ export function renderEmployeeRequests(data) {
   const { requests, pagination } = currentRequestsData;
 
   const renderRows = () => {
-    const visibleRequests = currentStatus === 'cancelled'
-      ? requests.filter(r => isEmployeeCancelled(r))
-      : requests;
-    return renderTableRows(visibleRequests);
+    return renderTableRows(filterRequests(requests, currentStatus, currentSearch, currentPeriod));
+  };
+
+  const renderCardsList = () => {
+    return renderCards(filterRequests(requests, currentStatus, currentSearch, currentPeriod));
   };
 
   const renderPagination = () => {
-    const visibleRequests = currentStatus === 'cancelled'
-      ? requests.filter(r => isEmployeeCancelled(r))
-      : requests;
-    return renderPaginationHTML(visibleRequests, pagination);
+    return renderPaginationHTML(filterRequests(requests, currentStatus, currentSearch, currentPeriod), pagination);
   };
 
   const isHrRole = user && user.role !== 'employee';
@@ -270,7 +418,7 @@ export function renderEmployeeRequests(data) {
         ${isHrRole ? `
         <button id="btn-new-request-on-behalf" class="flex items-center gap-2 px-5 py-3 border-2 border-primary text-primary bg-white rounded-xl font-bold text-label-lg hover:bg-primary/5 active:scale-[0.97] transition-all">
           <span class="material-symbols-outlined">supervised_user_circle</span>
-          สร้างคำขอให้พนักงาน
+          สร้างคำขอแทนพนักงาน
         </button>
         ` : ''}
         <button id="btn-new-request" class="flex items-center gap-2 px-6 py-3 bg-primary text-on-primary rounded-xl font-bold text-label-lg hover:opacity-90 active:scale-[0.97] transition-all shadow-lg shadow-primary/25">
@@ -288,7 +436,7 @@ export function renderEmployeeRequests(data) {
         <div class="flex items-center justify-between px-6 pt-5 pb-3 border-b border-outline-variant">
           <div class="flex items-center gap-3">
             <span class="material-symbols-outlined text-primary">supervised_user_circle</span>
-            <h3 class="text-title-md font-bold text-on-surface">สร้างคำขอให้พนักงาน</h3>
+            <h3 class="text-title-md font-bold text-on-surface">สร้างคำขอแทนพนักงาน</h3>
           </div>
           <button id="on-behalf-modal-close" class="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-surface-container-high text-outline transition-colors">
             <span class="material-symbols-outlined text-[20px]">close</span>
@@ -315,9 +463,7 @@ export function renderEmployeeRequests(data) {
           <div id="on-behalf-employee-preview" class="hidden">
             <div class="bg-primary-fixed/20 border border-primary/20 rounded-xl p-4 space-y-2">
               <div class="flex items-center gap-3 mb-3">
-                <div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center shrink-0">
-                  <span class="material-symbols-outlined text-on-primary text-[20px]">person</span>
-                </div>
+                <img id="on-behalf-preview-avatar" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" class="w-10 h-10 rounded-full object-cover border border-outline-variant/40 shrink-0" onerror="this.onerror=null; this.outerHTML='<div class=\'w-10 h-10 rounded-full bg-primary flex items-center justify-center shrink-0\'><span class=\'material-symbols-outlined text-on-primary text-[20px]\'>person</span></div>';" />
                 <div>
                   <p id="on-behalf-preview-name" class="text-label-md font-bold text-on-surface">-</p>
                   <p id="on-behalf-preview-empid" class="text-label-sm text-primary font-medium">-</p>
@@ -354,7 +500,7 @@ export function renderEmployeeRequests(data) {
           </button>
           <button id="on-behalf-confirm-btn" class="flex-[2] py-3 bg-primary text-on-primary font-bold rounded-xl hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed" disabled>
             <span class="material-symbols-outlined text-[18px]">edit_note</span>
-            สร้างคำขอให้พนักงาน
+            สร้างคำขอแทนพนักงาน
           </button>
         </div>
       </div>
@@ -398,14 +544,15 @@ export function renderEmployeeRequests(data) {
         <input id="filter-search" class="w-full pl-10 pr-4 py-2 border border-outline-variant rounded-lg focus:ring-2 focus:ring-primary/10 focus:border-primary outline-none transition-all text-body-md" placeholder="${t('employeeReq.searchPlaceholder')}" type="text" value="${currentSearch}" />
       </div>
       <div class="flex gap-3 flex-wrap">
-        <select id="filter-status" class="px-4 py-2 border border-outline-variant rounded-lg bg-surface-container-lowest text-on-surface-variant font-label-md focus:border-primary outline-none min-w-[140px] cursor-pointer">
+        <select id="filter-status" class="pl-4 pr-10 py-2 border border-outline-variant rounded-lg bg-surface-container-lowest text-on-surface-variant font-label-md focus:border-primary outline-none min-w-[140px] cursor-pointer">
           <option value="">${t('employeeReq.filterAll')}</option>
-          <option value="submitted" ${currentStatus === 'submitted' ? 'selected' : ''}>${t('status.submitted')}</option>
           <option value="in-review" ${currentStatus === 'in-review' ? 'selected' : ''}>${t('status.inReview')}</option>
+          <option value="in-progress" ${currentStatus === 'in-progress' ? 'selected' : ''}>${t('status.inProgress')}</option>
           <option value="approved" ${currentStatus === 'approved' ? 'selected' : ''}>${t('status.approved')}</option>
+          <option value="rejected" ${currentStatus === 'rejected' ? 'selected' : ''}>${t('status.rejected')}</option>
           <option value="cancelled" ${currentStatus === 'cancelled' ? 'selected' : ''}>${t('status.cancelled')}</option>
         </select>
-        <select id="filter-period" class="px-4 py-2 border border-outline-variant rounded-lg bg-surface-container-lowest text-on-surface-variant font-label-md focus:border-primary outline-none min-w-[140px] cursor-pointer">
+        <select id="filter-period" class="pl-4 pr-10 py-2 border border-outline-variant rounded-lg bg-surface-container-lowest text-on-surface-variant font-label-md focus:border-primary outline-none min-w-[140px] cursor-pointer">
           <option value="">${t('employeeReq.period30d')}</option>
           <option value="3m">${t('employeeReq.period3m')}</option>
           <option value="2026">${t('employeeReq.period2026')}</option>
@@ -420,8 +567,17 @@ export function renderEmployeeRequests(data) {
 
     <!-- Request Table -->
     <div class="bg-surface-container-lowest rounded-xl shadow-sm border border-outline-variant overflow-hidden">
-      <div class="overflow-x-auto">
-        <table class="w-full text-left border-collapse">
+      <div class="overflow-x-auto hidden md:block">
+        <table class="w-full text-left border-collapse table-fixed">
+          <colgroup>
+            <col style="width: 13%">
+            <col style="width: 13%">
+            <col style="width: 22%">
+            <col style="width: 10%">
+            <col style="width: 14%">
+            <col style="width: 14%">
+            <col style="width: 14%">
+          </colgroup>
           <thead>
             <tr class="bg-surface-container-low border-b border-outline-variant">
               <th class="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase tracking-wider">${t('employeeReq.tableId')}</th>
@@ -437,6 +593,10 @@ export function renderEmployeeRequests(data) {
             ${renderRows()}
           </tbody>
         </table>
+      </div>
+      <!-- Mobile Cards -->
+      <div id="requests-cards" class="md:hidden divide-y divide-outline-variant">
+        ${renderCardsList()}
       </div>
       <!-- No results placeholder -->
       <div id="no-results" class="hidden p-16 text-center text-on-surface-variant">
@@ -581,17 +741,14 @@ export function initEmployeeRequests(container) {
   // immediately, without forcing the user to manually refresh the page.
   const refreshRequestTable = () => {
     const tbody = container.querySelector('#requests-tbody');
+    const cardsContainer = container.querySelector('#requests-cards');
     const paginationWrap = container.querySelector('#pagination-wrapper');
     if (!tbody) return;
 
-    // Re-derive the visible rows from the current data set and inject them.
-    // Event handlers are bound via delegation on `container` (see below),
-    // so replacing the tbody HTML here keeps everything working.
-    const visibleRequests = currentStatus === 'cancelled'
-      ? currentRequestsData.requests.filter(r => isEmployeeCancelled(r))
-      : currentRequestsData.requests;
+    const visibleRequests = filterRequests(currentRequestsData.requests, currentStatus, currentSearch, currentPeriod);
 
     tbody.innerHTML = renderTableRows(visibleRequests);
+    if (cardsContainer) cardsContainer.innerHTML = renderCards(visibleRequests);
 
     if (paginationWrap) {
       paginationWrap.innerHTML = renderPaginationHTML(visibleRequests, currentRequestsData.pagination);
@@ -696,6 +853,8 @@ export function initEmployeeRequests(container) {
         if (deptEl) deptEl.textContent = emp.Department || '-';
         if (compEl) compEl.textContent = emp.CompanyName || '-';
         onBehalfPreview?.classList.remove('hidden');
+        const avatarImg = container.querySelector('#on-behalf-preview-avatar');
+        if (avatarImg && emp.ID_Emp) loadAvatarForElement(avatarImg, emp.ID_Emp);
         if (onBehalfConfirmBtn) onBehalfConfirmBtn.disabled = false;
       } else {
         onBehalfNotFound?.classList.remove('hidden');
@@ -728,10 +887,22 @@ export function initEmployeeRequests(container) {
   const trackerModal = container.querySelector('#tracker-modal');
   const trackerModalBody = container.querySelector('#tracker-modal-body');
 
-  const openTrackerModal = (req) => {
+  const openTrackerModal = async (req) => {
     if (!req) return;
 
     const reqId = req.id || req.request_code;
+    // Re-fetch from API to ensure latest data (delivery status, ETA, etc.).
+    // Use getEmployeeRequests directly (NOT dataService.fetchRequests) so the
+    // shared cache + 'requests-updated' broadcast are untouched — otherwise the
+    // page's subscription re-renders the table with different pagination and
+    // the other rows disappear / the list jumps back to page 1.
+    try {
+      const user = getCurrentUser();
+      const freshData = await getEmployeeRequests({ page: 1, limit: 100, search: '', status: '', user_id: user?.email || '' });
+      const freshReq = (freshData.requests || []).find(r => r.id === reqId || r.request_code === reqId);
+      if (freshReq) req = freshReq;
+    } catch (_) {}
+
     const rawReqs = JSON.parse(localStorage.getItem('hrbp_employee_requests') || '[]');
     const raw = rawReqs.find(r => r.id === reqId) || {};
 
@@ -766,13 +937,15 @@ export function initEmployeeRequests(container) {
       const parts = etaSource.split('-');
       if (parts.length === 3) {
         const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-        etaDisplay = `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear() + 543}`;
+        const etaYear = getLang() === 'en' ? d.getFullYear() : d.getFullYear() + 543;
+        etaDisplay = `${d.getDate()} ${months[d.getMonth()]} ${etaYear}`;
         isCustomEta = true;
       }
     }
     if (!etaDisplay) {
       const d = addWorkingDays(new Date(), ETA_WORKING_DAYS);
-      etaDisplay = `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear() + 543}`;
+      const defaultYear = getLang() === 'en' ? d.getFullYear() : d.getFullYear() + 543;
+      etaDisplay = `${d.getDate()} ${months[d.getMonth()]} ${defaultYear}`;
     }
 
     const hasEta = !!req.eta_date;
@@ -800,7 +973,7 @@ export function initEmployeeRequests(container) {
           <span class="px-3 py-1 rounded-full text-label-sm font-bold ${statusColors[modalStatus] || statusColors.draft}">${modalStatusLabel}</span>
         </div>
         <p class="text-headline-md font-bold text-on-surface">${req.id || req.request_code}</p>
-        <p class="text-label-sm text-outline mt-1">${t('employeeReq.sentDate')} ${req.date || '-'}</p>
+        <p class="text-label-sm text-outline mt-1">${t('employeeReq.sentDate')} ${formatStoredDate(req.date) || '-'}</p>
         ${req.status !== 'rejected' && !isEmployeeCancelled(req) ? `
         <div class="mt-3 flex items-center gap-2 text-label-sm text-primary font-bold">
           <span class="material-symbols-outlined text-[16px]">schedule</span>
@@ -1065,18 +1238,29 @@ export function initEmployeeRequests(container) {
   const statusFilter = container.querySelector('#filter-status');
 
   const applyFilter = () => {
-    const query = searchInput?.value.toLowerCase().trim() || '';
-    const status = statusFilter?.value || '';
-    currentSearch = query;
-    currentStatus = status;
-    reloadPage(1);
+    currentSearch = searchInput?.value.toLowerCase().trim() || '';
+    currentStatus = statusFilter?.value || '';
+    currentPeriod = container.querySelector('#filter-period')?.value || '';
+
+    const visibleRequests = filterRequests(currentRequestsData.requests, currentStatus, currentSearch, currentPeriod);
+
+    const tbody = container.querySelector('#requests-tbody');
+    const cardsContainer = container.querySelector('#requests-cards');
+    const paginationWrap = container.querySelector('#pagination-wrapper');
+    const noResults = container.querySelector('#no-results');
+    const tableWrap = container.querySelector('.overflow-x-auto');
+
+    if (tbody) tbody.innerHTML = renderTableRows(visibleRequests);
+    if (cardsContainer) cardsContainer.innerHTML = renderCards(visibleRequests);
+    if (paginationWrap) paginationWrap.innerHTML = renderPaginationHTML(visibleRequests, currentRequestsData.pagination);
+    if (noResults) noResults.classList.toggle('hidden', visibleRequests.length > 0);
+    if (tableWrap) tableWrap.classList.toggle('hidden', visibleRequests.length === 0);
+    if (cardsContainer) cardsContainer.classList.toggle('hidden', visibleRequests.length === 0);
   };
 
   searchInput?.addEventListener('input', applyFilter);
   statusFilter?.addEventListener('change', applyFilter);
-  container.querySelector('#filter-period')?.addEventListener('change', () => {
-    showToast(t('employeeReq.periodUpdated'), 'event');
-  });
+  container.querySelector('#filter-period')?.addEventListener('change', applyFilter);
 
   // ── Clear Filter ───────────────────────────────────────────────
   container.querySelector('#btn-clear-filter')?.addEventListener('click', () => {
@@ -1085,7 +1269,8 @@ export function initEmployeeRequests(container) {
     container.querySelector('#filter-period').value = '';
     currentSearch = '';
     currentStatus = '';
-    reloadPage(1);
+    currentPeriod = '';
+    applyFilter();
     showToast(t('employeeReq.filterCleared'), 'filter_list_off');
   });
 
@@ -1093,7 +1278,6 @@ export function initEmployeeRequests(container) {
   const handleKeyDown = (e) => {
     if (e.key === 'Escape') {
       closeTrackerModal();
-      closeRejectionModal();
       closeOnBehalfModal();
     }
   };

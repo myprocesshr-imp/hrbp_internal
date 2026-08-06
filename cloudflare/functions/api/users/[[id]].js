@@ -6,6 +6,15 @@ export async function onRequest(context) {
   const json = (data, status = 200) =>
     new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
 
+  const jsonCached = (data) =>
+    new Response(JSON.stringify(data), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'private, max-age=15',
+      },
+    });
+
   // GET /api/users — list all (with optional role filter)
   if (method === 'GET') {
     const role = url.searchParams.get('role');
@@ -23,7 +32,7 @@ export async function onRequest(context) {
       ...u,
       responsible_bu: JSON.parse(u.responsible_bu || '[]'),
     }));
-    return json({ users });
+    return jsonCached({ users });
   }
 
   // PUT /api/users/:id — update user

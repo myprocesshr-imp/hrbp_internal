@@ -62,21 +62,19 @@ export function syncCertCounter() {
   return max;
 }
 
-export function peekCertNumber(isEnglish = false) {
+export function peekCertNumber() {
   const next = syncCertCounter() + 1;
-  const year = isEnglish ? getChristianCertYear() : getBuddhistCertYear();
-  return formatCertNumber(next, year);
+  return formatCertNumber(next, getChristianCertYear());
 }
 
-export function allocateCertNumber(isEnglish = false) {
+export function allocateCertNumber() {
   const next = syncCertCounter() + 1;
   localStorage.setItem(CERT_COUNTER_KEY, String(next));
-  const year = isEnglish ? getChristianCertYear() : getBuddhistCertYear();
-  return formatCertNumber(next, year);
+  return formatCertNumber(next, getChristianCertYear());
 }
 
-function getNextCertNumber(isEnglish = false) {
-  return allocateCertNumber(isEnglish);
+function getNextCertNumber() {
+  return allocateCertNumber();
 }
 const THAI_MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
 const THAI_MONTHS_SHORT = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
@@ -584,7 +582,7 @@ export async function downloadCertificatePdf(data, { filename } = {}) {
 export async function printCertificate(data) {
   const html = await generateCertificateHTML(data);
   const win = window.open('', '_blank', 'width=900,height=700');
-  if (!win) { alert(t('cert.popupPrint')); return; }
+  if (!win) { console.warn('Popup blocked — please allow pop-ups for this site'); return; }
   win.document.write(html);
   win.document.close();
   win.focus();
@@ -672,7 +670,7 @@ export async function previewCertificate(data, doPrint = false) {
   let html = injectPreviewScreenStyles(await generateCertificateHTML(data));
   html = injectPreviewToolbar(html);
   const win = window.open('', '_blank', 'width=920,height=900,scrollbars=yes');
-  if (!win) { alert(t('cert.popupPreview')); return null; }
+  if (!win) { console.warn('Popup blocked — please allow pop-ups for this site'); return null; }
   win.document.write(html);
   win.document.close();
   win.focus();
@@ -787,7 +785,7 @@ export async function openEditableCertificate(reqId) {
 
   const html = await generateEditableCertificateHTML(data);
   const win  = window.open('', '_blank', 'width=960,height=720');
-  if (!win) { alert(t('cert.popupCreate')); return; }
+  if (!win) { console.warn('Popup blocked — please allow pop-ups for this site'); return; }
   win.document.write(html);
   win.document.close();
   win.focus();

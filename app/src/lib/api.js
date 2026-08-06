@@ -2,12 +2,26 @@ import { syncStoredRequestsDownloadAccess, enrichRequestDownloadAccess } from '.
 
 const API_BASE = '/api';
 
+// Short-TTL in-memory cache for GET responses (see request() below).
+const GET_CACHE_TTL_MS = 60_000;
+const _getCache = new Map();
+
+// ── Environment detection ──────────────────────────────────────────────────────
+// VITE_USE_WRANGLER is undefined on Cloudflare Pages (env is gitignored).
+// Use hostname-based detection as fallback: real API on any non-localhost host.
+function isProductionEnv() {
+  if (import.meta.env.VITE_USE_WRANGLER === 'true') return true;
+  const host = window.location.hostname;
+  return host !== 'localhost' && host !== '127.0.0.1';
+}
+
 // ── LocalStorage Mock DB fallback if wrangler is not running ──
 const MOCK_DB_KEY_USERS = 'hrbp_mock_users';
 const MOCK_DB_KEY_BUS = 'hrbp_mock_bus';
 const MOCK_DB_KEY_PICKUP = 'hrbp_pickup_locations';
 const MOCK_DB_KEY_DELIVERY_METHODS = 'hrbp_delivery_methods';
 const MOCK_DB_KEY_CERT_MASTER = 'hrbp_cert_master_data';
+const MOCK_DB_KEY_TPL_CATEGORIES = 'hrbp_template_categories';
 const MOCK_DB_VERSION_KEY = 'hrbp_mock_db_version';
 const MOCK_DB_VERSION = 5; // v5: Add chatchawan_tu to SEED_USERS
 
@@ -375,6 +389,41 @@ function handleMockRequest(path, method, body) {
     }
   }
 
+  // template categories
+  if (path.startsWith('/template-categories')) {
+    const cats = JSON.parse(localStorage.getItem(MOCK_DB_KEY_TPL_CATEGORIES) || '[]');
+    const idMatch = path.match(/^\/template-categories\/([^?]+)/);
+    if (idMatch) {
+      const id = idMatch[1];
+      if (method === 'PUT') {
+        const idx = cats.findIndex(c => String(c.id) === String(id));
+        if (idx !== -1) {
+          Object.assign(cats[idx], body);
+          localStorage.setItem(MOCK_DB_KEY_TPL_CATEGORIES, JSON.stringify(cats));
+          return { data: [cats[idx]] };
+        }
+        throw new Error('Category not found');
+      }
+      if (method === 'DELETE') {
+        const filtered = cats.filter(c => String(c.id) !== String(id));
+        localStorage.setItem(MOCK_DB_KEY_TPL_CATEGORIES, JSON.stringify(filtered));
+        return { success: true };
+      }
+    } else {
+      if (method === 'GET') {
+        return { data: cats };
+      }
+      if (method === 'POST') {
+        const existing = cats.find(c => c.name.toLowerCase() === body.name.toLowerCase());
+        if (existing) throw new Error('Category already exists');
+        const newCat = { id: Date.now(), name: body.name, icon: body.icon || 'folder', sort_order: body.sort_order ?? cats.length + 1, status: 'active' };
+        cats.push(newCat);
+        localStorage.setItem(MOCK_DB_KEY_TPL_CATEGORIES, JSON.stringify(cats));
+        return { data: [newCat] };
+      }
+    }
+  }
+
   // certificate master data
   if (path.startsWith('/cert-master-data')) {
     const data = JSON.parse(localStorage.getItem(MOCK_DB_KEY_CERT_MASTER) || '{}');
@@ -633,7 +682,19 @@ async function request(method, path, body, extraHeaders = {}) {
 
   Object.assign(opts.headers, extraHeaders);
 
-  const isProd = import.meta.env.VITE_USE_WRANGLER === 'true';
+  const isProd = isProductionEnv();
+
+  // GET short-TTL cache: re-renders and repeated dashboard mounts hammer the
+  // same read endpoints (requests, users, lookup tables) on a shared Workers
+  // free-tier quota (100k requests/day, account-wide). A tiny in-memory cache
+  // absorbs those duplicates while staying fresh enough for normal use.
+  if (method === 'GET' && !extraHeaders['X-Skip-Cache']) {
+    const cacheKey = `get:${path}`;
+    const hit = _getCache.get(cacheKey);
+    if (hit && (Date.now() - hit.ts) < GET_CACHE_TTL_MS) {
+      return hit.data;
+    }
+  }
 
   try {
     const res = await fetch(`${API_BASE}${path}`, opts);
@@ -659,11 +720,23 @@ async function request(method, path, body, extraHeaders = {}) {
       throw new Error(err.error || 'Request failed');
     }
 
-    try { return JSON.parse(text); } catch {
-      if (isProd) throw new Error(`Expected JSON from ${method} ${path}`);
-      console.warn(`[API Client] Expected JSON from ${method} ${path}, got content-type: ${res.headers.get('content-type')}. Falling back to mock database.`);
-      return handleMockRequest(path, method, body);
+    const data = (() => {
+      try { return JSON.parse(text); } catch {
+        if (isProd) throw new Error(`Expected JSON from ${method} ${path}`);
+        console.warn(`[API Client] Expected JSON from ${method} ${path}, got content-type: ${res.headers.get('content-type')}. Falling back to mock database.`);
+        return handleMockRequest(path, method, body);
+      }
+    })();
+
+    if (method === 'GET') {
+      _getCache.set(`get:${path}`, { data, ts: Date.now() });
+    } else {
+      // Any write (POST/PUT/DELETE) may change list data — drop cached GETs so
+      // the next read returns fresh results.
+      _getCache.clear();
     }
+
+    return data;
   } catch (error) {
     if (isProd) throw error;
     console.warn(`[API Client] Request failed. Falling back to mock database.`, error);
@@ -673,7 +746,7 @@ async function request(method, path, body, extraHeaders = {}) {
 
 // ── Auth ──────────────────────────────────────
 export async function login(username, password) {
-  const isProd = import.meta.env.VITE_USE_WRANGLER === 'true';
+  const isProd = isProductionEnv();
   try {
     return await request('POST', '/auth', { action: 'login', username, password });
   } catch (e) {
@@ -684,7 +757,7 @@ export async function login(username, password) {
 }
 
 export async function register(profile) {
-  const isProd = import.meta.env.VITE_USE_WRANGLER === 'true';
+  const isProd = isProductionEnv();
   try {
     return await request('POST', '/auth', { action: 'register', profile });
   } catch (e) {
@@ -717,8 +790,8 @@ export async function createBusinessUnit(name) {
   return request('POST', '/business-units', { name });
 }
 
-export async function updateBusinessUnit(id, name) {
-  return request('PUT', `/business-units/${id}`, { name });
+export async function updateBusinessUnit(id, data) {
+  return request('PUT', `/business-units/${id}`, typeof data === 'string' ? { name: data } : data);
 }
 
 export async function deleteBusinessUnit(id) {
@@ -734,8 +807,8 @@ export async function createPickupLocation(name) {
   return request('POST', '/pickup-locations', { name });
 }
 
-export async function updatePickupLocation(id, name) {
-  return request('PUT', `/pickup-locations/${id}`, { name });
+export async function updatePickupLocation(id, data) {
+  return request('PUT', `/pickup-locations/${id}`, typeof data === 'string' ? { name: data } : data);
 }
 
 export async function deletePickupLocation(id) {
@@ -751,12 +824,29 @@ export async function createDeliveryMethod(name) {
   return request('POST', '/delivery-methods', { name });
 }
 
-export async function updateDeliveryMethod(id, name) {
-  return request('PUT', `/delivery-methods/${id}`, { name });
+export async function updateDeliveryMethod(id, data) {
+  return request('PUT', `/delivery-methods/${id}`, typeof data === 'string' ? { name: data } : data);
 }
 
 export async function deleteDeliveryMethod(id) {
   return request('DELETE', `/delivery-methods/${id}`);
+}
+
+// ── Template Categories ─────────────────────
+export async function getTemplateCategories() {
+  return request('GET', '/template-categories');
+}
+
+export async function createTemplateCategory(data) {
+  return request('POST', '/template-categories', typeof data === 'string' ? { name: data } : data);
+}
+
+export async function updateTemplateCategory(id, data) {
+  return request('PUT', `/template-categories/${id}`, data);
+}
+
+export async function deleteTemplateCategory(id) {
+  return request('DELETE', `/template-categories/${id}`);
 }
 
 // ── Requests ──────────────────────────────────

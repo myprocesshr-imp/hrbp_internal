@@ -5,8 +5,9 @@
 import { navigate } from '../router.js';
 import { getCurrentUser } from '../mock-data.js';
 import { getEmployeeRequests, updateRequest, cancelRequest, getDeliveryMethods } from '../lib/api.js';
-import { openEditableCertificate, formatDateISO } from '../lib/templates.js';
-import { t } from '../lib/i18n.js';
+import { enrichRequestDownloadAccess } from '../lib/download-policy.js';
+import { openEditableCertificate, formatDateISO, printCertificate, buildCertDataFromRequest } from '../lib/templates.js';
+import { t, getLang } from '../lib/i18n.js';
 import { loadAvatarForElement } from '../lib/avatar-helper.js';
 import { dataService } from '../lib/data-service.js';
 
@@ -52,7 +53,8 @@ function formatThaiDate(dateStr) {
   const m = String(dateStr).match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!m) return dateStr;
   const d = new Date(+m[1], +m[2] - 1, +m[3]);
-  return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]} ${d.getFullYear() + 543}`;
+  const year = getLang() === 'en' ? d.getFullYear() : d.getFullYear() + 543;
+  return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]} ${year}`;
 }
 
 function getDashboardFilterStatus() {
@@ -66,22 +68,33 @@ function hasPhysicalDelivery(r) {
   return (r.delivery_value || r.delivery || '').toLowerCase().includes('physical');
 }
 
-function filterDashboardPending(pending, filterStatus) {
-  if (!filterStatus) return pending;
-  if (filterStatus === 'submitted') {
-    return pending.filter(r => r.status === 'submitted' || r.status === 'in-review');
+function filterDashboardPending(pending, filterStatus, searchTerm = '') {
+  let result = pending;
+  if (filterStatus) {
+    if (filterStatus === 'submitted') {
+      result = result.filter(r => r.status === 'submitted' || r.status === 'in-review');
+    } else if (filterStatus === 'today') {
+      const todayIso = new Date().toISOString().slice(0, 10);
+      result = result.filter(r => (r.date || r.created_at || '').includes(todayIso));
+    } else if (filterStatus === 'to-deliver') {
+      result = result.filter(r => r.status === 'approved'
+        && hasPhysicalDelivery(r)
+        && !r.physical_delivered);
+    } else {
+      result = result.filter(r => r.status === filterStatus && !isEmployeeCancelled(r));
+    }
   }
-  if (filterStatus === 'today') {
-    const today = new Date();
-    const todayLabel = `${today.getDate()} ${t('month.short')[today.getMonth()]} ${today.getFullYear() + 543}`;
-    return pending.filter(r => (r.date || '').includes(todayLabel));
+  if (searchTerm) {
+    const term = searchTerm.toLowerCase();
+    result = result.filter(r =>
+      (r.name || '').toLowerCase().includes(term) ||
+      (r.id || '').toLowerCase().includes(term) ||
+      (r.department || '').toLowerCase().includes(term) ||
+      (r.type || '').toLowerCase().includes(term) ||
+      (r.cert_number || '').toLowerCase().includes(term)
+    );
   }
-  if (filterStatus === 'to-deliver') {
-    return pending.filter(r => r.status === 'approved'
-      && hasPhysicalDelivery(r)
-      && !r.physical_delivered);
-  }
-  return pending.filter(r => r.status === filterStatus && !isEmployeeCancelled(r));
+  return result;
 }
 
 function escapeCsvCell(value) {
@@ -284,7 +297,7 @@ function computeDashboardData(data) {
       eta_date: r.eta_date || rawMap[r.id || r.request_code]?.eta_date || '',
       date: r.date || r.created_at || '',
       attachments: r.attachments || rawMap[r.id || r.request_code]?.attachments || [],
-      hr_officer: r.hr_officer?.name || rawMap[r.id || r.request_code]?.hr_officer?.name || '',
+      hr_officer: r.hr_officer?.name || rawMap[r.id || r.request_code]?.hr_officer?.name || r.hr_officer_name || rawMap[r.id || r.request_code]?.hr_officer_name || '',
       cert_ready: r.cert_ready || false,
     };
   })).concat(cancelled.map(r => {
@@ -303,7 +316,7 @@ function computeDashboardData(data) {
       eta_date: r.eta_date || rawMap[r.id || r.request_code]?.eta_date || '',
       date: r.date || r.created_at || '',
       attachments: r.attachments || rawMap[r.id || r.request_code]?.attachments || [],
-      hr_officer: r.hr_officer?.name || rawMap[r.id || r.request_code]?.hr_officer?.name || '',
+      hr_officer: r.hr_officer?.name || rawMap[r.id || r.request_code]?.hr_officer?.name || r.hr_officer_name || rawMap[r.id || r.request_code]?.hr_officer_name || '',
       acknowledged_by: rawMap[r.id || r.request_code]?.acknowledged_by || null,
       cert_ready: r.cert_ready || false,
     };
@@ -326,7 +339,7 @@ function computeDashboardData(data) {
       eta_date: r.eta_date || '',
       date: r.date || r.created_at || '',
       attachments: r.attachments || rawMap[r.id || r.request_code]?.attachments || [],
-      hr_officer: r.hr_officer?.name || rawMap[r.id || r.request_code]?.hr_officer?.name || '',
+      hr_officer: r.hr_officer?.name || rawMap[r.id || r.request_code]?.hr_officer?.name || r.hr_officer_name || rawMap[r.id || r.request_code]?.hr_officer_name || '',
       acknowledged_by: r.acknowledged_by || rawMap[r.id || r.request_code]?.acknowledged_by || null,
       cert_ready: r.cert_ready || false,
     };
@@ -339,7 +352,7 @@ function computeDashboardData(data) {
     const statusLabelMap = { 'submitted': t('status.submitted'), 'in-review': t('status.inReview'), 'approved': t('status.approved'), 'rejected': t('status.rejected'), 'cancelled': t('status.cancelled') };
     const label = r.status === 'in-review' && isEtaSet ? t('status.inProgress') : (isEmployeeCancelled(r) ? t('status.cancelled') : (statusLabelMap[r.status] || r.status_label || r.statusLabel || r.status));
     const hrInfo = r.hr_officer || raw.hr_officer || {};
-    const hrOfficerName = hrInfo.name || '';
+    const hrOfficerName = typeof hrInfo === 'string' ? hrInfo : (hrInfo.name || r.hr_officer_name || raw.hr_officer_name || '');
     return {
       id: r.id || r.request_code,
       emp_id: u.emp_id || u.empCode || r.emp_id || '',
@@ -356,6 +369,9 @@ function computeDashboardData(data) {
       delivery_value: r.delivery_value || raw.delivery_value || '',
       pickup_location: r.pickup_location || raw.pickup_location || '',
       physical_delivered: r.physical_delivered || raw.physical_delivered || false,
+      delivery_method: r.delivery_method || raw.delivery_method || '',
+      delivery_date: r.delivery_date || raw.delivery_date || '',
+      delivery_time: r.delivery_time || raw.delivery_time || '',
       notes: r.notes || raw.notes || '',
       department: u.department || r.user_department || r.department || '',
       company_name: u.company_name || raw.company_name || r.company_name || '',
@@ -370,6 +386,24 @@ function computeDashboardData(data) {
       acknowledged_by: r.acknowledged_by || raw.acknowledged_by || null,
       cert_ready: r.cert_ready || raw.cert_ready || false,
       cert_number: raw.cert_number || '',
+      cert_issue_snapshot: r.cert_issue_snapshot || raw.cert_issue_snapshot || null,
+      hr_officer_name: r.hr_officer_name || raw.hr_officer_name || '',
+      hr_officer_phone: r.hr_officer_phone || raw.hr_officer_phone || '',
+      hr_officer_email: r.hr_officer_email || raw.hr_officer_email || '',
+      hr_signer_name: r.hr_signer_name || raw.hr_signer_name || '',
+      hr_signer_position: r.hr_signer_position || raw.hr_signer_position || '',
+      hr_signer_phone: r.hr_signer_phone || raw.hr_signer_phone || '',
+      hr_signer_signature: r.hr_signer_signature || raw.hr_signer_signature || '',
+      hr_purpose_detail: r.hr_purpose_detail || raw.hr_purpose_detail || '',
+      hr_salary_amount: r.hr_salary_amount || raw.hr_salary_amount || '',
+      user_email: r.user_email || raw.user_email || '',
+      sex_id: r.sex_id || raw.sex_id || '',
+      fname_e: r.fname_e || raw.fname_e || '',
+      lname_e: r.lname_e || raw.lname_e || '',
+      visa_country: r.visa_country || raw.visa_country || '',
+      abroad_destination: r.abroad_destination || raw.abroad_destination || '',
+      abroad_start_date: r.abroad_start_date || raw.abroad_start_date || '',
+      abroad_end_date: r.abroad_end_date || raw.abroad_end_date || '',
       cancelled_by_employee: isEmployeeCancelled(r),
       request_data: r.request_data || raw.request_data || {}
     };
@@ -391,8 +425,9 @@ export function renderAdminDashboard(data) {
   const chartCancelled = chart.cancelled.slice(slice);
   const page = parseInt(sessionStorage.getItem('dashboard-pending-page') || '1');
   const filterStatus = getDashboardFilterStatus();
+  const searchTerm = sessionStorage.getItem('dashboard-search') || '';
   const perPage = 5;
-  const filtered = filterDashboardPending(pending, filterStatus);
+  const filtered = filterDashboardPending(pending, filterStatus, searchTerm);
   const totalPages = Math.ceil(filtered.length / perPage) || 1;
   const safePage = Math.min(page, totalPages);
   const start = (safePage - 1) * perPage;
@@ -439,8 +474,9 @@ export function renderAdminDashboard(data) {
         }
 
         const isActive = filterStatus === kpi.filterValue;
+        const activeClasses = isActive ? 'border-[#00236f] border-2 shadow-md' : `border ${borderClass} hover:border-primary/50`;
         return `
-          <div class="kpi-card tonal-card p-5 border ${borderClass} relative overflow-hidden group transition-all cursor-pointer ${isActive ? 'ring-2 ring-primary shadow-md' : 'hover:border-primary/50'}" data-filter-value="${kpi.filterValue}">
+          <div class="kpi-card tonal-card p-5 ${activeClasses} relative overflow-hidden group transition-all cursor-pointer" data-filter-value="${kpi.filterValue}">
             <div class="flex justify-between items-start mb-2">
               <div class="w-10 h-10 rounded-lg ${iconBgClass} ${iconColorClass} flex items-center justify-center">
                 <span class="material-symbols-outlined text-[20px]">${kpi.icon}</span>
@@ -459,22 +495,39 @@ export function renderAdminDashboard(data) {
     <div class="tonal-card border border-outline-variant rounded-2xl mb-8">
       <div class="p-6 border-b border-outline-variant flex justify-between items-center flex-wrap gap-3">
         <h3 class="text-headline-md font-bold text-primary">${t('dashboard.tableTitle')}</h3>
-        <button id="btn-export-csv" class="text-label-md text-primary font-bold hover:underline">${t('common.export')}</button>
+        <div class="flex items-center gap-3">
+          <div class="relative">
+            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[18px]">search</span>
+            <input id="dashboard-search" type="text" placeholder="${t('common.searchPlaceholder')}" class="pl-10 pr-4 py-2 bg-white border border-outline-variant rounded-lg text-label-sm focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none w-[220px]" value="${sessionStorage.getItem('dashboard-search') || ''}" />
+          </div>
+          <button id="btn-export-csv" class="text-label-md text-primary font-bold hover:underline">${t('common.export')}</button>
+        </div>
       </div>
       
-      <div class="overflow-x-auto overflow-y-visible">
-        <table class="w-full text-left">
+      <div class="overflow-x-auto overflow-y-visible hidden md:block">
+        <table class="w-full text-left table-fixed">
+          <colgroup>
+            <col class="w-[18%]">
+            <col class="w-[10%]">
+            <col class="w-[12%]">
+            <col class="w-[15%]">
+            <col class="w-[12%]">
+            <col class="w-[9%]">
+            <col class="w-[9%]">
+            <col class="w-[10%]">
+            <col class="w-[5%]">
+          </colgroup>
           <thead class="bg-surface-container-low text-label-sm text-on-surface-variant font-bold border-b border-outline-variant">
             <tr>
-              <th class="px-6 py-3">${t('dashboard.tableRequester')}</th>
-              <th class="px-6 py-3">${t('dashboard.tableDocNo')}</th>
-              <th class="px-6 py-3">${t('dashboard.tableDept')}</th>
-              <th class="px-6 py-3">${t('dashboard.tableType')}</th>
-              <th class="px-6 py-3">${t('dashboard.tableStatus')}</th>
-              <th class="px-6 py-3">${t('dashboard.tableDate')}</th>
-              <th class="px-6 py-3">${t('dashboard.tableEta')}</th>
-              <th class="px-6 py-3">${t('dashboard.tableHr')}</th>
-              <th class="px-6 py-3 text-right">${t('dashboard.tableAction')}</th>
+              <th class="px-4 py-3">${t('dashboard.tableRequester')}</th>
+              <th class="px-4 py-3">${t('dashboard.tableDocNo')}</th>
+              <th class="px-4 py-3">${t('dashboard.tableDept')}</th>
+              <th class="px-4 py-3">${t('dashboard.tableType')}</th>
+              <th class="px-4 py-3">${t('dashboard.tableStatus')}</th>
+              <th class="px-4 py-3">${t('dashboard.tableDate')}</th>
+              <th class="px-4 py-3">${t('dashboard.tableEta')}</th>
+              <th class="px-4 py-3">${t('dashboard.tableHr')}</th>
+              <th class="px-4 py-3 text-center">${t('dashboard.tableAction')}</th>
             </tr>
           </thead>
           <tbody id="pending-table-body" class="divide-y divide-outline-variant">
@@ -496,27 +549,27 @@ export function renderAdminDashboard(data) {
                 && !req.physical_delivered;
               
               return `
-                <tr class="hover:bg-surface-container-low transition-colors ${isDelivered ? 'bg-teal-50/50' : ''}">
-                  <td class="px-6 py-4">
-                    <div class="flex items-center gap-3 whitespace-nowrap">
+                <tr class="hover:bg-surface-container-low transition-colors cursor-pointer btn-open-detail ${isDelivered ? 'bg-teal-50/50' : ''}" data-req-id="${req.id}">
+                  <td class="px-4 py-3">
+                    <div class="flex items-center gap-2">
                       ${renderRequesterAvatar(req)}
-                      <div>
-                        <p class="text-label-md font-bold text-on-surface">${req.name}</p>
-                        <p class="text-[10px] text-outline">${req.phone}</p>
+                      <div class="min-w-0">
+                        <p class="text-label-md font-bold text-on-surface truncate">${req.name}</p>
+                        <p class="text-[10px] text-outline truncate">${req.phone}</p>
                       </div>
                     </div>
                   </td>
-                  <td class="px-6 py-4 text-label-sm text-on-surface-variant whitespace-nowrap">${req.cert_number || '-'}</td>
-                  <td class="px-6 py-4 text-label-sm text-on-surface-variant whitespace-nowrap">${req.department}</td>
-                  <td class="px-6 py-4 text-label-md text-on-surface whitespace-normal break-words">${req.type}</td>
-                  <td class="px-6 py-4">
+                  <td class="px-4 py-3 text-label-sm text-on-surface-variant break-all">${req.cert_number || '-'}</td>
+                  <td class="px-4 py-3 text-label-sm text-on-surface-variant break-words">${req.department}</td>
+                  <td class="px-4 py-3 text-label-sm text-on-surface whitespace-normal break-words">${req.type}</td>
+                  <td class="px-4 py-3">
                     <div class="flex flex-col gap-1 items-start">
-                    <span class="px-2.5 py-1 rounded-md text-[10px] whitespace-nowrap ${badgeClass}">${req.statusLabel}</span>${isDelivered ? `<span class="inline-flex items-center gap-0.5 px-2 py-0.5 bg-teal-100 text-teal-700 rounded text-[10px] font-bold"><span class="material-symbols-outlined text-[12px]">local_shipping</span>${t('status.delivered')}</span>` : ''}
+                    <span class="px-2 py-1 rounded-md text-[10px] whitespace-nowrap ${badgeClass}">${req.statusLabel}</span>${isDelivered ? `<span class="inline-flex items-center gap-0.5 px-2 py-0.5 bg-teal-100 text-teal-700 rounded text-[10px] font-bold"><span class="material-symbols-outlined text-[12px]">local_shipping</span>${t('status.delivered')}</span>` : ''}
                     </div>
                   </td>
-                  <td class="px-6 py-4 text-label-sm text-on-surface-variant whitespace-nowrap">${req.date}</td>
-                  <td class="px-6 py-4 text-label-sm text-on-surface-variant whitespace-nowrap">${formatThaiDate(req.eta_date)}</td>
-                  <td class="px-6 py-4 whitespace-nowrap">
+                  <td class="px-4 py-3 text-label-sm text-on-surface-variant whitespace-nowrap">${formatThaiDate(req.date)}</td>
+                  <td class="px-4 py-3 text-label-sm text-on-surface-variant whitespace-nowrap">${formatThaiDate(req.eta_date)}</td>
+                  <td class="px-4 py-3">
                     <div class="flex flex-col gap-1">
                       ${req.hr_officer ? `
                       <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-primary-fixed/20 text-primary rounded text-[10px] font-bold">
@@ -532,16 +585,12 @@ export function renderAdminDashboard(data) {
                       ` : '<span class="text-[10px] text-outline">-</span>'}
                     </div>
                   </td>
-                  <td class="px-6 py-4 text-right whitespace-nowrap">
-                    <div class="relative dropdown-manage">
+                  <td class="px-4 py-3 text-center whitespace-nowrap">
+                    <div class="relative dropdown-manage inline-block">
                       <button class="btn-dropdown-toggle text-primary hover:bg-primary/10 p-1.5 rounded transition-colors" data-req-id="${req.id}" title="${t('dashboard.tableAction')}">
                         <span class="material-symbols-outlined text-[18px]">more_vert</span>
                       </button>
                       <div class="dropdown-menu hidden absolute right-0 top-full mt-1 bg-surface-container-lowest border border-outline-variant rounded-xl shadow-xl z-50 min-w-[180px] overflow-hidden">
-                        <button class="btn-view-detail w-full flex items-center gap-3 px-4 py-3 text-label-md text-on-surface hover:bg-surface-container-high transition-colors text-left" data-req-id="${req.id}">
-                          <span class="material-symbols-outlined text-[18px] text-outline">visibility</span>
-                          ${t('dashboard.actionView')}
-                        </button>
                         ${(req.status === 'submitted' || (req.status === 'in-review' && !req.eta_date)) ? `
                         <button class="btn-acknowledge w-full flex items-center gap-3 px-4 py-3 text-label-md text-on-surface hover:bg-surface-container-high transition-colors text-left" data-req-id="${req.id}" data-req-name="${req.name}">
                           <span class="material-symbols-outlined text-[18px] text-outline">handshake</span>
@@ -564,6 +613,12 @@ export function renderAdminDashboard(data) {
                           ${t('dashboard.actionDeliver')}
                         </button>
                         ` : ''}
+                        ${(req.status === 'approved' || req.cert_issue_snapshot) ? `
+                        <button class="btn-print-cert w-full flex items-center gap-3 px-4 py-3 text-label-md text-on-surface hover:bg-surface-container-high transition-colors text-left" data-req-id="${req.id}" data-req-name="${req.name}">
+                          <span class="material-symbols-outlined text-[18px] text-outline">print</span>
+                          ${t('common.print')}
+                        </button>
+                        ` : ''}
                         ${!isCancelledByEmp && req.status !== 'rejected' && req.status !== 'approved' && req.status !== 'cancelled' ? `
                         <hr class="border-t border-outline-variant mx-3">
                         <button class="btn-reject w-full flex items-center gap-3 px-4 py-3 text-label-md text-error hover:bg-error-container/20 transition-colors text-left" data-req-id="${req.id}" data-req-name="${req.name}">
@@ -582,8 +637,52 @@ export function renderAdminDashboard(data) {
           </tbody>
         </table>
       </div>
-      ${totalPages > 1 ? `
+      <!-- Mobile Cards -->
+      <div id="pending-table-cards" class="md:hidden divide-y divide-outline-variant">
+        ${pageItems.length > 0 ? pageItems.map(req => {
+          let badgeClass = 'bg-surface-container-highest text-on-surface-variant font-bold';
+          const isCancelledByEmp = isEmployeeCancelled(req);
+          if (isCancelledByEmp) badgeClass = 'bg-surface-container-highest text-outline font-bold';
+          else if (req.status === 'submitted') badgeClass = 'bg-primary/10 text-primary font-bold';
+          else if (req.status === 'rejected') badgeClass = 'bg-[#fee2e2] text-[#991b1b] font-bold';
+          else if (req.status === 'in-review' && !req.eta_date) badgeClass = 'bg-[#fef3c7] text-[#92400e] font-bold';
+          else if (req.status === 'in-review' && req.eta_date) badgeClass = 'bg-[#dce1ff] text-primary font-bold';
+          else if (req.status === 'approved') badgeClass = 'bg-[#dcfce7] text-[#166534] font-bold';
+          else if (req.eta_date) badgeClass = 'bg-[#dce1ff] text-primary font-bold';
+          const isDelivered = req.status === 'approved' && hasPhysicalDelivery(req) && req.physical_delivered;
+          const initials = (req.name || 'HR').substring(0, 2);
+          return `
+            <div class="p-4 hover:bg-surface-container-low transition-colors cursor-pointer btn-open-detail ${isDelivered ? 'bg-teal-50/50' : ''}" data-req-id="${req.id}">
+              <div class="flex items-center gap-3 mb-2">
+                <div class="w-10 h-10 rounded-full bg-primary-fixed text-primary flex items-center justify-center font-bold text-sm shrink-0">${initials}</div>
+                <div class="min-w-0 flex-1">
+                  <p class="text-label-md font-bold text-on-surface truncate">${req.name}</p>
+                  <p class="text-[10px] text-outline truncate">${req.department} · ${formatThaiDate(req.date)}</p>
+                </div>
+                <span class="px-2 py-1 rounded-md text-[10px] whitespace-nowrap ${badgeClass}">${req.statusLabel}</span>
+              </div>
+              <div class="flex items-center justify-between text-label-sm text-on-surface-variant mb-2">
+                <span>${req.type}</span>
+                ${req.eta_date ? `<span class="text-primary font-bold">${formatThaiDate(req.eta_date)}</span>` : ''}
+              </div>
+              <div class="flex items-center gap-2">
+                <button class="btn-dropdown-toggle flex-1 flex items-center justify-center gap-1 px-3 py-2 border border-outline-variant rounded-lg text-label-sm text-primary font-medium hover:bg-surface-container transition-colors" data-req-id="${req.id}">
+                  <span class="material-symbols-outlined text-[16px]">more_horiz</span> ${t('common.manage')}
+                </button>
+                ${(req.status === 'approved' || req.cert_issue_snapshot) ? `
+                <button class="btn-print-cert flex items-center justify-center gap-1 px-3 py-2 border border-outline-variant rounded-lg text-label-sm text-on-surface-variant font-medium hover:bg-surface-container transition-colors" data-req-id="${req.id}" data-req-name="${req.name}">
+                  <span class="material-symbols-outlined text-[16px]">print</span>
+                </button>
+                ` : ''}
+              </div>
+            </div>
+          `;
+        }).join('') : `
+          <div class="p-8 text-center text-on-surface-variant">${t('common.noResults')}</div>
+        `}
+      </div>
       <div class="p-4 bg-surface-container-low border-t border-outline-variant">
+        ${totalPages > 1 ? `
         <div class="flex items-center justify-between">
           <p class="text-label-sm text-outline">${t('common.showing')} ${start + 1} ${t('common.to')} ${Math.min(start + perPage, filtered.length)} ${t('common.from')} ${filtered.length} ${t('common.items')}</p>
           <div class="flex gap-2">
@@ -598,8 +697,8 @@ export function renderAdminDashboard(data) {
             </button>
           </div>
         </div>
+        ` : ''}
       </div>
-      ` : ''}
     </div>
 
     <!-- Trends Chart + SLA Alerts -->
@@ -822,7 +921,10 @@ export function renderAdminDashboard(data) {
                 <div class="bg-surface-container rounded-xl px-3 py-2 min-w-0 col-span-2">
                   <p class="text-label-xs text-outline m-0">${t('dashboard.issueHrbpOnDoc')}</p>
                   <p class="text-label-md font-semibold text-on-surface text-left break-words m-0 mt-0.5 leading-tight" id="dt-issue-hrbp">-</p>
-                  <p class="text-label-xs text-outline mt-1" id="dt-issue-hrbp-contact">-</p>
+                  <div class="flex flex-wrap gap-3 mt-2">
+                    <p class="text-label-sm text-on-surface-variant" id="dt-issue-hrbp-phone">-</p>
+                    <p class="text-label-sm text-on-surface-variant" id="dt-issue-hrbp-email">-</p>
+                  </div>
                 </div>
                 <div class="bg-surface-container rounded-xl px-3 py-2 min-w-0 col-span-2">
                   <p class="text-label-xs text-outline m-0">${t('dashboard.issueSigner')}</p>
@@ -854,6 +956,14 @@ export function renderAdminDashboard(data) {
                 <div class="bg-surface-container rounded-xl px-3 py-2 min-w-0">
                   <p class="text-label-xs text-outline m-0">${t('newReq.labelPickup')}</p>
                   <p class="text-label-md font-semibold text-on-surface text-left break-words m-0 mt-0.5 leading-tight" id="dt-delivery-pickup">-</p>
+                </div>
+                <div class="bg-surface-container rounded-xl px-3 py-2 min-w-0">
+                  <p class="text-label-xs text-outline m-0">${t('dashboard.deliverMethod')}</p>
+                  <p class="text-label-md font-semibold text-on-surface text-left break-words m-0 mt-0.5 leading-tight" id="dt-delivery-method">-</p>
+                </div>
+                <div class="bg-surface-container rounded-xl px-3 py-2 min-w-0">
+                  <p class="text-label-xs text-outline m-0">${t('dashboard.deliverDate')}</p>
+                  <p class="text-label-md font-semibold text-on-surface text-left break-words m-0 mt-0.5 leading-tight" id="dt-delivery-datetime">-</p>
                 </div>
               </div>
             </div>
@@ -913,7 +1023,7 @@ export function renderAdminDashboard(data) {
 	          <div class="space-y-4">
 	            <div>
 	              <label class="block text-label-md font-semibold text-on-surface-variant mb-2">${t('dashboard.deliverMethod')} <span class="text-error">*</span></label>
-	              <select id="deliver-method" class="w-full bg-white border border-outline-variant rounded-lg px-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-on-surface font-medium">
+	              <select id="deliver-method" class="w-full bg-white border border-outline-variant rounded-lg pl-4 pr-10 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-on-surface font-medium">
 	                <option value="">-- ${t('common.select')} --</option>
 	              </select>
 	            </div>
@@ -990,25 +1100,43 @@ export function initAdminDashboard(container) {
   // ── Dashboard refresh helper (replaces setTimeout+hashchange pattern) ──
   // Re-renders only the dynamic content (KPIs, table, pagination, chart, SLA)
   // without a full page reload, then re-binds event handlers for new elements.
+  // Coalesces concurrent calls: while a refresh is in-flight, further requests
+  // are coalesced into one trailing run so a burst of 'requests-updated' events
+  // never causes a refresh storm.
   let _refreshing = false;
+  let _refreshPending = false;
   const refreshDashboard = async () => {
-    if (_refreshing) return;
+    if (_refreshing) { _refreshPending = true; return; }
     _refreshing = true;
-    // Show loading indicator (create if not exists)
-    let loadingOverlay = container.querySelector('#admin-loading');
-    if (!loadingOverlay) {
-      loadingOverlay = document.createElement('div');
-      loadingOverlay.id = 'admin-loading';
-      loadingOverlay.className = 'fixed inset-0 z-[150] flex items-center justify-center hidden';
-      loadingOverlay.innerHTML = `<div class="absolute inset-0 bg-black/20 backdrop-blur-sm"></div><div class="relative flex flex-col items-center gap-4 bg-surface-container-lowest px-8 py-6 rounded-2xl shadow-2xl"><div class="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div><span class="text-label-md font-bold text-on-surface">${t('common.loading')}</span></div>`;
-      container.appendChild(loadingOverlay);
+    // Show subtle inline loading bar instead of full-screen overlay
+    let loadingBar = container.querySelector('#admin-loading-bar');
+    if (!loadingBar) {
+      loadingBar = document.createElement('div');
+      loadingBar.id = 'admin-loading-bar';
+      loadingBar.className = 'absolute top-0 left-0 right-0 h-[3px] z-[160] overflow-hidden rounded-t-2xl';
+      loadingBar.innerHTML = `<div class="h-full bg-primary animate-[loadingBar_1.2s_ease-in-out_infinite]" style="width:40%;margin-left:-40%"></div><style>@keyframes loadingBar{0%{margin-left:-40%;width:40%}50%{margin-left:30%;width:50%}100%{margin-left:100%;width:20%}}</style>`;
+      // Insert the loading bar into the table card — NOT the first KPI card.
+      // KPI cards also carry the `tonal-card ... border-outline-variant` classes
+      // and appear earlier in the DOM, so a bare `.tonal-card.border...` query
+      // matches one of them and the bar gets destroyed on every KPI re-render.
+      const tableCard = [...container.querySelectorAll('.tonal-card')]
+        .find(card => card.querySelector('#pending-table-body'));
+      if (tableCard) {
+        tableCard.style.position = 'relative';
+        tableCard.appendChild(loadingBar);
+      }
     }
-    loadingOverlay.classList.remove('hidden');
+    loadingBar.classList.remove('hidden');
 
     try {
       const data = await getEmployeeRequests({ page: 1, limit: 100, search: '', status: '' });
-      // Sync fetched data into dataService cache for cross-component consistency
-      await dataService.fetchRequests({ page: 1, limit: 100, search: '', status: '' });
+      // Re-seed the dataService cache from the data we just fetched (with the
+      // same download-access enrichment fetchRequests would apply) instead of
+      // issuing a second, identical GET via fetchRequests.
+      dataService.setData({
+        ...data,
+        requests: (data.requests || []).map(r => enrichRequestDownloadAccess(r)),
+      }, { silent: true });
       const { kpis, pending, chart } = computeDashboardData(data);
       _lastPendingData = pending;
 
@@ -1021,8 +1149,9 @@ export function initAdminDashboard(container) {
       const chartRejected = chart.rejected.slice(slice);
       const chartCancelled = chart.cancelled.slice(slice);
       const filterStatus = getDashboardFilterStatus();
+      const searchTerm = sessionStorage.getItem('dashboard-search') || '';
       const perPage = 5;
-      const filtered = filterDashboardPending(pending, filterStatus);
+      const filtered = filterDashboardPending(pending, filterStatus, searchTerm);
       const page = parseInt(sessionStorage.getItem('dashboard-pending-page') || '1');
       const totalPages = Math.ceil(filtered.length / perPage) || 1;
       const safePage = Math.min(page, totalPages);
@@ -1040,7 +1169,8 @@ export function initAdminDashboard(container) {
         else if (kpi.color === 'error') { borderClass = 'border-red-200'; iconBgClass = 'bg-red-100'; iconColorClass = 'text-red-700'; valueColor = 'text-red-700'; subtextClass = 'text-red-700 font-bold'; }
         else if (kpi.color === 'tertiary') { borderClass = 'border-amber-300'; iconBgClass = 'bg-amber-100'; iconColorClass = 'text-amber-700'; valueColor = 'text-amber-700'; subtextClass = 'text-amber-700 font-bold'; }
         const isActive = filterStatus === kpi.filterValue;
-        return `<div class="kpi-card tonal-card p-5 border ${borderClass} relative overflow-hidden group transition-all cursor-pointer ${isActive ? 'ring-2 ring-primary shadow-md' : 'hover:border-primary/50'}" data-filter-value="${kpi.filterValue}">
+        const activeClasses = isActive ? 'border-[#00236f] border-2 shadow-md' : `border ${borderClass} hover:border-primary/50`;
+        return `<div class="kpi-card tonal-card p-5 ${activeClasses} relative overflow-hidden group transition-all cursor-pointer" data-filter-value="${kpi.filterValue}">
           <div class="flex justify-between items-start mb-2">
             <div class="w-10 h-10 rounded-lg ${iconBgClass} ${iconColorClass} flex items-center justify-center"><span class="material-symbols-outlined text-[20px]">${kpi.icon}</span></div>
             ${kpi.sublabel ? `<span class="text-[10px] ${subtextClass}">${kpi.sublabel}</span>` : ''}
@@ -1071,29 +1201,29 @@ export function initAdminDashboard(container) {
           && hasPhysicalDelivery(req)
           && !req.physical_delivered;
 
-        return `<tr class="hover:bg-surface-container-low transition-colors ${isDelivered ? 'bg-teal-50/50' : ''}">
-          <td class="px-6 py-4"><div class="flex items-center gap-3 whitespace-nowrap">
+        return `<tr class="hover:bg-surface-container-low transition-colors cursor-pointer btn-open-detail ${isDelivered ? 'bg-teal-50/50' : ''}" data-req-id="${req.id}">
+          <td class="px-4 py-3"><div class="flex items-center gap-2">
             ${renderRequesterAvatar(req)}
-            <div><p class="text-label-md font-bold text-on-surface">${req.name}</p><p class="text-[10px] text-outline">${req.phone}</p></div>
+            <div class="min-w-0"><p class="text-label-md font-bold text-on-surface truncate">${req.name}</p><p class="text-[10px] text-outline truncate">${req.phone}</p></div>
           </div></td>
-          <td class="px-6 py-4 text-label-sm text-on-surface-variant whitespace-nowrap">${req.cert_number || '-'}</td>
-          <td class="px-6 py-4 text-label-sm text-on-surface-variant whitespace-nowrap">${req.department}</td>
-          <td class="px-6 py-4 text-label-md text-on-surface whitespace-nowrap">${req.type}</td>
-          <td class="px-6 py-4"><div class="flex flex-col gap-1 items-start"><span class="px-2.5 py-1 rounded-md text-[10px] whitespace-nowrap ${badgeClass}">${req.statusLabel}</span>${isDelivered ? `<span class="inline-flex items-center gap-0.5 px-2 py-0.5 bg-teal-100 text-teal-700 rounded text-[10px] font-bold"><span class="material-symbols-outlined text-[12px]">local_shipping</span>${t('status.delivered')}</span>` : ''}</div></td>
-          <td class="px-6 py-4 text-label-sm text-on-surface-variant whitespace-nowrap">${req.date}</td>
-          <td class="px-6 py-4 text-label-sm text-on-surface-variant whitespace-nowrap">${formatThaiDate(req.eta_date)}</td>
-          <td class="px-6 py-4 whitespace-nowrap"><div class="flex flex-col gap-1">
+          <td class="px-4 py-3 text-label-sm text-on-surface-variant break-all">${req.cert_number || '-'}</td>
+          <td class="px-4 py-3 text-label-sm text-on-surface-variant break-words">${req.department}</td>
+          <td class="px-4 py-3 text-label-sm text-on-surface whitespace-normal break-words">${req.type}</td>
+          <td class="px-4 py-3"><div class="flex flex-col gap-1 items-start"><span class="px-2 py-1 rounded-md text-[10px] whitespace-nowrap ${badgeClass}">${req.statusLabel}</span>${isDelivered ? `<span class="inline-flex items-center gap-0.5 px-2 py-0.5 bg-teal-100 text-teal-700 rounded text-[10px] font-bold"><span class="material-symbols-outlined text-[12px]">local_shipping</span>${t('status.delivered')}</span>` : ''}</div></td>
+          <td class="px-4 py-3 text-label-sm text-on-surface-variant whitespace-nowrap">${formatThaiDate(req.date)}</td>
+          <td class="px-4 py-3 text-label-sm text-on-surface-variant whitespace-nowrap">${formatThaiDate(req.eta_date)}</td>
+          <td class="px-4 py-3"><div class="flex flex-col gap-1">
             ${req.hr_officer ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 bg-primary-fixed/20 text-primary rounded text-[10px] font-bold"><span class="material-symbols-outlined text-[12px]">person_pin</span>${t('dashboard.hrSelected')} ${req.hr_officer}</span>` : ''}
             ${req.acknowledged_by ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 bg-[#dcfce7] text-[#166534] rounded text-[10px] font-bold"><span class="material-symbols-outlined text-[12px]">verified</span>${t('dashboard.hrAcknowledged')} ${req.acknowledged_by}</span>` : '<span class="text-[10px] text-outline">-</span>'}
           </div></td>
-          <td class="px-6 py-4 text-right whitespace-nowrap"><div class="relative dropdown-manage">
+          <td class="px-4 py-3 text-center whitespace-nowrap"><div class="relative dropdown-manage inline-block">
             <button class="btn-dropdown-toggle text-primary hover:bg-primary/10 p-1.5 rounded transition-colors" data-req-id="${req.id}"><span class="material-symbols-outlined text-[18px]">more_vert</span></button>
             <div class="dropdown-menu hidden absolute right-0 top-full mt-1 bg-surface-container-lowest border border-outline-variant rounded-xl shadow-xl z-50 min-w-[180px] overflow-hidden">
-              <button class="btn-view-detail w-full flex items-center gap-3 px-4 py-3 text-label-md text-on-surface hover:bg-surface-container-high transition-colors text-left" data-req-id="${req.id}"><span class="material-symbols-outlined text-[18px] text-outline">visibility</span>${t('dashboard.actionView')}</button>
               ${(req.status === 'submitted' || (req.status === 'in-review' && !req.eta_date)) ? `<button class="btn-acknowledge w-full flex items-center gap-3 px-4 py-3 text-label-md text-on-surface hover:bg-surface-container-high transition-colors text-left" data-req-id="${req.id}" data-req-name="${req.name}"><span class="material-symbols-outlined text-[18px] text-outline">handshake</span>${t('dashboard.actionAck')}</button>` : ''}
               ${req.eta_date ? `<button class="btn-edit-eta w-full flex items-center gap-3 px-4 py-3 text-label-md text-on-surface hover:bg-surface-container-high transition-colors text-left" data-req-id="${req.id}" data-req-name="${req.name}"><span class="material-symbols-outlined text-[18px] text-outline">schedule</span>${t('dashboard.actionEta')}</button>
               <button class="btn-create-cert w-full flex items-center gap-3 px-4 py-3 text-label-md text-on-surface hover:bg-surface-container-high transition-colors text-left" data-req-id="${req.id}" data-req-name="${req.name}"><span class="material-symbols-outlined text-[18px] text-outline">badge</span>${t('dashboard.actionCreateCert')}</button>` : ''}
               ${needsDelivery ? `<button class="btn-deliver w-full flex items-center gap-3 px-4 py-3 text-label-md text-amber-800 hover:bg-amber-50 transition-colors text-left" data-req-id="${req.id}" data-req-name="${req.name}"><span class="material-symbols-outlined text-[18px] text-amber-600">local_shipping</span>${t('dashboard.actionDeliver')}</button>` : ''}
+              ${(req.status === 'approved' || req.cert_issue_snapshot) ? `<button class="btn-print-cert w-full flex items-center gap-3 px-4 py-3 text-label-md text-on-surface hover:bg-surface-container-high transition-colors text-left" data-req-id="${req.id}" data-req-name="${req.name}"><span class="material-symbols-outlined text-[18px] text-outline">print</span>${t('common.print')}</button>` : ''}
               ${!isCancelledByEmp && req.status !== 'rejected' && req.status !== 'approved' && req.status !== 'cancelled' ? `<hr class="border-t border-outline-variant mx-3"><button class="btn-reject w-full flex items-center gap-3 px-4 py-3 text-label-md text-error hover:bg-error-container/20 transition-colors text-left" data-req-id="${req.id}" data-req-name="${req.name}"><span class="material-symbols-outlined text-[18px]">cancel</span>${t('dashboard.actionReject')}</button>` : ''}
             </div>
           </div></td>
@@ -1116,6 +1246,17 @@ export function initAdminDashboard(container) {
           </div>
         </div>` : '';
       }
+
+      // Update chart period buttons highlight
+      const currentChartPeriod = sessionStorage.getItem('dashboard-chart-period') || '6m';
+      container.querySelectorAll('.btn-chart-period').forEach(btn => {
+        const period = btn.getAttribute('data-period');
+        if (period === currentChartPeriod) {
+          btn.className = 'btn-chart-period px-3 py-1.5 rounded-lg text-label-sm font-bold transition-colors bg-primary text-on-primary shadow-sm';
+        } else {
+          btn.className = 'btn-chart-period px-3 py-1.5 rounded-lg text-label-sm font-bold transition-colors text-on-surface-variant hover:bg-surface-container-high';
+        }
+      });
 
       // Update chart bars
       const chartBarsContainer = container.querySelector('#chart-bars');
@@ -1186,7 +1327,7 @@ export function initAdminDashboard(container) {
           openEtaModal(reqName, raw.eta_date || '');
         });
       });
-      container.querySelectorAll('.btn-view-detail').forEach(btn => {
+      container.querySelectorAll('.btn-open-detail').forEach(btn => {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
           const reqId = btn.getAttribute('data-req-id') || '';
@@ -1214,8 +1355,8 @@ export function initAdminDashboard(container) {
           const deliveryValue = raw.delivery_value || raw.delivery || '';
           setField('dt-delivery', raw.delivery || '');
           setField('dt-pickup', raw.pickup_location || (!deliveryValue.includes('physical') ? 'ไม่ระบุ (ไม่ใช่การรับที่สำนักงาน)' : ''));
-          setField('dt-date', raw.date || '');
-          setField('dt-hr-officer', raw.hr_officer || '');
+          setField('dt-date', formatThaiDate(raw.date) || '');
+          setField('dt-hr-officer', raw.hr_officer || raw.hr_officer_name || '');
           const notesEl = container.querySelector('#dt-notes');
           if (notesEl) notesEl.textContent = (raw.notes || '').trim() || '-';
           const issueSection = container.querySelector('#dt-issue-section');
@@ -1227,11 +1368,17 @@ export function initAdminDashboard(container) {
               setField('dt-issue-date', snap?.cert_issued_date || raw.cert_issued_date || '');
               setField('dt-issue-template', snap?.cert_template_name || raw.cert_template_name || '');
               setField('dt-issue-hrbp', snap?.hr_officer_name || raw.hr_officer || '-');
-              const contactEl = container.querySelector('#dt-issue-hrbp-contact');
-              if (contactEl) {
+              const phoneEl = container.querySelector('#dt-issue-hrbp-phone');
+              const emailEl = container.querySelector('#dt-issue-hrbp-email');
+              if (phoneEl) {
                 const phone = snap?.hr_officer_phone || raw.hr_officer_phone || '';
+                phoneEl.textContent = phone ? `โทร. ${phone}` : '-';
+                phoneEl.classList.toggle('hidden', !phone);
+              }
+              if (emailEl) {
                 const email = snap?.hr_officer_email || raw.hr_officer_email || '';
-                contactEl.textContent = [phone && `โทร. ${phone}`, email && `E-mail: ${email}`].filter(Boolean).join(' · ') || '-';
+                emailEl.textContent = email ? `E-mail: ${email}` : '-';
+                emailEl.classList.toggle('hidden', !email);
               }
               const signerEl = container.querySelector('#dt-issue-signer');
               if (signerEl) {
@@ -1261,6 +1408,25 @@ export function initAdminDashboard(container) {
           if (deliveryStatusSection) {
             const hasPhysical = deliveryValue.includes('physical');
             deliveryStatusSection.classList.toggle('hidden', !hasPhysical);
+            if (hasPhysical) {
+              const isDelivered = raw.physical_delivered || false;
+              const statusEl = container.querySelector('#dt-delivery-status-value');
+              const pickupEl = container.querySelector('#dt-delivery-pickup');
+              const methodEl = container.querySelector('#dt-delivery-method');
+              const datetimeEl = container.querySelector('#dt-delivery-datetime');
+              if (statusEl) {
+                statusEl.textContent = isDelivered ? t('dashboard.deliverySent') : t('dashboard.deliveryPending');
+                statusEl.classList.toggle('text-green-700', isDelivered);
+                statusEl.classList.toggle('text-amber-700', !isDelivered);
+              }
+              if (pickupEl) pickupEl.textContent = raw.pickup_location || '-';
+              if (methodEl) methodEl.textContent = raw.delivery_method || '-';
+              if (datetimeEl) {
+                const dDate = raw.delivery_date || '';
+                const dTime = raw.delivery_time || '';
+                datetimeEl.textContent = dDate ? (dTime ? `${dDate} ${dTime}` : dDate) : '-';
+              }
+            }
           }
           detailModal?.classList.remove('hidden');
           document.body.style.overflow = 'hidden';
@@ -1289,6 +1455,22 @@ export function initAdminDashboard(container) {
           openDeliverModal(reqName, reqId);
         });
       });
+      container.querySelectorAll('.btn-print-cert').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const reqId = btn.getAttribute('data-req-id') || '';
+          const raw = _lastPendingData.find(r => String(r.id) === String(reqId)) || {};
+          if (!raw.id) { showToast(t('common.error'), 'error'); return; }
+          try {
+            const user = getCurrentUser();
+            const certData = buildCertDataFromRequest(raw, user);
+            await printCertificate(certData);
+          } catch (err) {
+            console.error('[Dashboard] Print failed:', err);
+            showToast(t('cert.popupPrint'), 'error');
+          }
+        });
+      });
       container.querySelectorAll('.btn-page').forEach(btn => {
         btn.addEventListener('click', (e) => {
           const pg = parseInt(btn.getAttribute('data-page'), 10);
@@ -1309,8 +1491,14 @@ export function initAdminDashboard(container) {
       console.warn('[Dashboard] Refresh failed:', err);
     } finally {
       _refreshing = false;
-      // Hide loading indicator
-      if (loadingOverlay) loadingOverlay.classList.add('hidden');
+      // Hide loading bar
+      if (loadingBar) loadingBar.classList.add('hidden');
+      // A call arrived while we were busy — run once more so the UI reflects
+      // the latest state (e.g. the server response that landed mid-refresh).
+      if (_refreshPending) {
+        _refreshPending = false;
+        refreshDashboard();
+      }
     }
   };
   const showToast = (msg, icon = 'check_circle') => {
@@ -1330,8 +1518,11 @@ export function initAdminDashboard(container) {
 
   // ── Subscribe to DataService events for cross-component sync ──
   // When an employee cancels a request, the dashboard auto-refreshes
-  // without the HR user needing to manually reload the page.
+  // without the HR user needing to manually reload the page. Mutations this
+  // page performs itself are skipped here — they own their own refresh.
+  let _mutationInFlight = false;
   const unsubscribeFromDataService = dataService.on('requests-updated', () => {
+    if (_mutationInFlight) return;
     if (!container.querySelector('#pending-table-body')) return; // not mounted
     refreshDashboard();
   });
@@ -1381,13 +1572,17 @@ export function initAdminDashboard(container) {
     showToast(t('dashboard.etaSaveSuccess'), 'schedule');
 
     // Centralized update through DataService (handles optimistic + API + rollback)
+    _mutationInFlight = true;
     dataService.updateRequest(currentReqId, {
       eta_date: dateVal,
       eta_submitted_at: new Date().toISOString().split('T')[0],
       status: 'in-review',
       statusLabel: t('status.inProgress'),
       acknowledged_by: acknowledgedBy,
-}).catch(err => console.warn('[ETA] DataService update error:', err));
+    }).then(() => {
+      refreshDashboard();
+    }).catch(err => console.warn('[ETA] DataService update error:', err))
+      .finally(() => { _mutationInFlight = false; });
   });
 
   // ── Rejection Modal ─────────────────────────────────────────────
@@ -1453,7 +1648,7 @@ export function initAdminDashboard(container) {
       });
       showToast(t('dashboard.markDeliveredSuccess'), 'success');
       await refreshDashboard();
-      const reopenBtn = container.querySelector(`.btn-view-detail[data-req-id="${currentDeliverId}"]`);
+      const reopenBtn = container.querySelector(`.btn-open-detail[data-req-id="${currentDeliverId}"]`);
       if (reopenBtn) reopenBtn.click();
     } catch (e) {
       showToast('Error: ' + e.message, 'error');
@@ -1472,6 +1667,7 @@ export function initAdminDashboard(container) {
     showToast(t('dashboard.rejectSuccess'), 'cancel');
 
     // Centralized update through DataService (handles optimistic + API + rollback)
+    _mutationInFlight = true;
     dataService.updateRequest(currentRejectId, {
       status: 'rejected',
       statusLabel: t('status.rejected'),
@@ -1481,7 +1677,8 @@ export function initAdminDashboard(container) {
       canCancel: false,
     }).then(() => {
       refreshDashboard();
-    }).catch(err => console.warn('[Reject] DataService update error:', err));
+    }).catch(err => console.warn('[Reject] DataService update error:', err))
+      .finally(() => { _mutationInFlight = false; });
   });
 
   container.querySelectorAll('.btn-reject').forEach(btn => {
@@ -1509,6 +1706,24 @@ export function initAdminDashboard(container) {
       const reqName = btn.getAttribute('data-req-name') || t('dashboard.thisRequest');
       const reqId = btn.getAttribute('data-req-id') || '';
       openDeliverModal(reqName, reqId);
+    });
+  });
+
+  // ── Print Certificate ──────────────────────────────────────────
+  container.querySelectorAll('.btn-print-cert').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const reqId = btn.getAttribute('data-req-id') || '';
+      const raw = _lastPendingData.find(r => String(r.id) === String(reqId)) || {};
+      if (!raw.id) { showToast(t('common.error'), 'error'); return; }
+      try {
+        const user = getCurrentUser();
+        const certData = buildCertDataFromRequest(raw, user);
+        await printCertificate(certData);
+      } catch (err) {
+        console.error('[Dashboard] Print failed:', err);
+        showToast(t('cert.popupPrint'), 'error');
+      }
     });
   });
 
@@ -1561,7 +1776,7 @@ export function initAdminDashboard(container) {
   container.querySelector('#detail-modal-close')?.addEventListener('click', closeDetailModal);
   container.querySelector('#detail-modal-backdrop')?.addEventListener('click', closeDetailModal);
 
-  container.querySelectorAll('.btn-view-detail').forEach(btn => {
+  container.querySelectorAll('.btn-open-detail').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const reqId = btn.getAttribute('data-req-id') || '';
@@ -1595,7 +1810,7 @@ export function initAdminDashboard(container) {
       const deliveryValue = raw.delivery_value || raw.delivery || '';
       setField('dt-delivery',   raw.delivery || '');
       setField('dt-pickup',     raw.pickup_location || (!deliveryValue.includes('physical') ? 'ไม่ระบุ (ไม่ใช่การรับที่สำนักงาน)' : ''));
-      setField('dt-date',       raw.date || '');
+      setField('dt-date',       formatThaiDate(raw.date) || '');
       setField('dt-hr-officer', raw.hr_officer || '');
 
       // Notes
@@ -1617,11 +1832,17 @@ export function initAdminDashboard(container) {
           setField('dt-issue-date', snap?.cert_issued_date || raw.cert_issued_date || '');
           setField('dt-issue-template', snap?.cert_template_name || raw.cert_template_name || '');
           setField('dt-issue-hrbp', issuedHrbp);
-          const contactEl = container.querySelector('#dt-issue-hrbp-contact');
-          if (contactEl) {
+          const phoneEl = container.querySelector('#dt-issue-hrbp-phone');
+          const emailEl = container.querySelector('#dt-issue-hrbp-email');
+          if (phoneEl) {
             const phone = snap?.hr_officer_phone || raw.hr_officer_phone || '';
+            phoneEl.textContent = phone ? `โทร. ${phone}` : '-';
+            phoneEl.classList.toggle('hidden', !phone);
+          }
+          if (emailEl) {
             const email = snap?.hr_officer_email || raw.hr_officer_email || '';
-            contactEl.textContent = [phone && `โทร. ${phone}`, email && `E-mail: ${email}`].filter(Boolean).join(' · ') || '-';
+            emailEl.textContent = email ? `E-mail: ${email}` : '-';
+            emailEl.classList.toggle('hidden', !email);
           }
           const signerEl = container.querySelector('#dt-issue-signer');
           if (signerEl) {
@@ -1662,13 +1883,19 @@ export function initAdminDashboard(container) {
           const isDelivered = raw.physical_delivered || false;
           const statusEl = container.querySelector('#dt-delivery-status-value');
           const pickupEl = container.querySelector('#dt-delivery-pickup');
+          const methodEl = container.querySelector('#dt-delivery-method');
+          const datetimeEl = container.querySelector('#dt-delivery-datetime');
           if (statusEl) {
             statusEl.textContent = isDelivered ? t('dashboard.deliverySent') : t('dashboard.deliveryPending');
             statusEl.classList.toggle('text-green-700', isDelivered);
             statusEl.classList.toggle('text-amber-700', !isDelivered);
           }
-          if (pickupEl) {
-            pickupEl.textContent = raw.pickup_location || '-';
+          if (pickupEl) pickupEl.textContent = raw.pickup_location || '-';
+          if (methodEl) methodEl.textContent = raw.delivery_method || '-';
+          if (datetimeEl) {
+            const dDate = raw.delivery_date || '';
+            const dTime = raw.delivery_time || '';
+            datetimeEl.textContent = dDate ? (dTime ? `${dDate} ${dTime}` : dDate) : '-';
           }
         } else {
           deliveryStatusSection.classList.add('hidden');
@@ -1720,13 +1947,10 @@ export function initAdminDashboard(container) {
     kpiGridEl.addEventListener('click', (e) => {
       const card = e.target.closest('.kpi-card');
       if (!card) return;
+      card.classList.add('clicked');
+      setTimeout(() => card.classList.remove('clicked'), 300);
       const val = card.getAttribute('data-filter-value');
       const current = getDashboardFilterStatus();
-      container.querySelectorAll('.kpi-card').forEach(c => {
-        const cv = c.getAttribute('data-filter-value') || '';
-        c.classList.toggle('ring-2', cv === val && val !== current);
-        c.classList.toggle('shadow-md', cv === val && val !== current);
-      });
       sessionStorage.setItem('dashboard-pending-page', '1');
       sessionStorage.setItem('dashboard-pending-filter', val === current ? '' : val);
       refreshDashboard();
@@ -1759,7 +1983,7 @@ export function initAdminDashboard(container) {
       try {
         const data = await getEmployeeRequests({ page: 1, limit: 100, search: '', status: '' });
         const { pending } = computeDashboardData(data);
-        const filtered = filterDashboardPending(pending, getDashboardFilterStatus());
+        const filtered = filterDashboardPending(pending, getDashboardFilterStatus(), sessionStorage.getItem('dashboard-search') || '');
         if (!filtered.length) {
           showToast(t('dashboard.csvNoData'), 'info');
           return;
@@ -1778,6 +2002,28 @@ export function initAdminDashboard(container) {
         showToast(t('common.error') + ': ' + (err.message || ''), 'error');
       } finally {
         exportBtn.disabled = false;
+      }
+    });
+  }
+
+  // ── Search Box ──────────────────────────────────────────────────
+  const searchInput = container.querySelector('#dashboard-search');
+  if (searchInput) {
+    let searchTimeout;
+    searchInput.addEventListener('input', (e) => {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => {
+        sessionStorage.setItem('dashboard-search', e.target.value);
+        sessionStorage.setItem('dashboard-pending-page', '1');
+        refreshDashboard();
+      }, 300);
+    });
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        clearTimeout(searchTimeout);
+        sessionStorage.setItem('dashboard-search', e.target.value);
+        sessionStorage.setItem('dashboard-pending-page', '1');
+        refreshDashboard();
       }
     });
   }

@@ -37,10 +37,16 @@ export async function onRequest(context) {
   // PUT /api/pickup-locations/:id — update
   if (method === 'PUT') {
     const id = url.pathname.split('/').pop();
-    const { name } = await request.json();
-    if (!name) return json({ error: 'Name is required' }, 400);
+    const { name, status } = await request.json();
 
-    await env.DB.prepare('UPDATE pickup_locations SET name = ? WHERE id = ?').bind(name, id).run();
+    const updates = [];
+    const params = [];
+    if (name !== undefined) { updates.push('name = ?'); params.push(name); }
+    if (status !== undefined) { updates.push('status = ?'); params.push(status); }
+    if (updates.length === 0) return json({ error: 'No fields to update' }, 400);
+
+    params.push(id);
+    await env.DB.prepare(`UPDATE pickup_locations SET ${updates.join(', ')} WHERE id = ?`).bind(...params).run();
     const loc = await env.DB.prepare('SELECT * FROM pickup_locations WHERE id = ?').bind(id).first();
     return json({ data: [loc] });
   }

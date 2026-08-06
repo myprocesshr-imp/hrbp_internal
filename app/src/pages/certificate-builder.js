@@ -441,7 +441,6 @@ function resolveDocIdForRequest(req, isEnglish = false) {
 }
 function loadHRStaff() {
   try {
-    initMockDB();
     const users = JSON.parse(localStorage.getItem(MOCK_USERS_KEY) || '[]');
     const hrUsers = users.filter(u => ['admin', 'hrmanager', 'hrbp'].includes(u.role));
     if (hrUsers.length > 0) {
@@ -535,7 +534,7 @@ function mockEmployee() {
       let req = loadedReqCache && (loadedReqCache.id === reqId || loadedReqCache.request_code === reqId) ? loadedReqCache : null;
       if (!req) {
         const reqs = JSON.parse(localStorage.getItem('hrbp_employee_requests') || '[]');
-        req = reqs.find(r => r.id === reqId);
+        req = reqs.find(r => r.id === reqId || r.request_code === reqId);
       }
 
       if (req) {
@@ -698,17 +697,17 @@ export function renderCertificateBuilder() {
         <!-- Main paragraph: uses structured rows so text wraps cleanly -->
         <p style="text-indent:2em;text-align:justify;word-break:break-word;">
           <span id="cb-opening">โดยหนังสือฉบับนี้ขอรับรองว่า</span>
-          <span id="cb-emp-name" style="font-weight:bold;border-bottom:1px solid #1a1a1a;padding:0 4px;">${emp.nameTH}</span>
+          <span id="cb-emp-name" style="font-weight:bold;border-bottom:1px solid #999;padding:0 4px;">${emp.nameTH}</span>
           <span id="cb-lbl-empcode"> รหัสพนักงาน </span>
-          <span id="cb-emp-empcode" style="font-weight:bold;border-bottom:1px solid #1a1a1a;padding:0 4px;">${emp.empCode}</span>
+          <span id="cb-emp-empcode" style="font-weight:bold;border-bottom:1px solid #999;padding:0 4px;">${emp.empCode}</span>
           <span id="cb-lbl-co"> เป็นพนักงานของบริษัท </span>
-          <span id="cb-emp-co" style="font-weight:bold;border-bottom:1px solid #1a1a1a;padding:0 4px;">${company.th}</span>
+          <span id="cb-emp-co" style="font-weight:bold;border-bottom:1px solid #999;padding:0 4px;">${company.th}</span>
           <span id="cb-lbl-pos"> ปฏิบัติงานในตำแหน่ง </span>
-          <span id="cb-emp-pos" style="font-weight:bold;border-bottom:1px solid #1a1a1a;padding:0 4px;">${emp.posTH}</span>
+          <span id="cb-emp-pos" style="font-weight:bold;border-bottom:1px solid #999;padding:0 4px;">${emp.posTH}</span>
           <span id="cb-lbl-dept"> ฝ่าย </span>
-          <span id="cb-emp-dept" style="font-weight:bold;border-bottom:1px solid #1a1a1a;padding:0 4px;">${emp.deptTH}</span>
+          <span id="cb-emp-dept" style="font-weight:bold;border-bottom:1px solid #999;padding:0 4px;">${emp.deptTH}</span>
           <span id="cb-lbl-since"> เริ่มทำงานตั้งแต่วันที่ </span>
-          <span id="cb-emp-start" style="font-weight:bold;border-bottom:1px solid #1a1a1a;padding:0 4px;">${emp.startTH}</span>
+          <span id="cb-emp-start" style="font-weight:bold;border-bottom:1px solid #999;padding:0 4px;">${emp.startTH}</span>
           <span id="cb-lbl-to"> ถึงปัจจุบัน</span>
           <span id="cb-salary-row" style="display:none;">
             <span id="cb-lbl-salary"> และได้รับอัตราเงินเดือนปัจจุบัน เดือนละ </span>
@@ -947,7 +946,7 @@ export async function initCertificateBuilder(container) {
 
       if (!req) {
         const reqs = JSON.parse(localStorage.getItem('hrbp_employee_requests') || '[]');
-        req = reqs.find(r => r.id === reqId);
+        req = reqs.find(r => r.id === reqId || r.request_code === reqId);
       }
 
         if (req) {
@@ -1124,23 +1123,53 @@ export async function initCertificateBuilder(container) {
           <div style="font-size:15px;color:#166534;font-weight:600">เลขที่ ${docId}</div>
           <div style="font-size:13px;color:#6b7280;margin-top:10px;line-height:1.5">พนักงานสามารถดาวน์โหลดได้แล้ว</div>
         </div>
+        <div style="display:flex;gap:10px;margin-top:4px">
+          <button id="cb-save-print-btn" style="
+            display:inline-flex;align-items:center;gap:6px;padding:10px 22px;
+            background:#14532d;color:#fff;border-radius:12px;font-size:14px;font-weight:700;
+            cursor:pointer;border:none;transition:opacity 0.2s;
+          " onmouseover="this.style.opacity=0.85" onmouseout="this.style.opacity=1">
+            <span class="material-symbols-outlined" style="font-size:18px">print</span>
+            พิมพ์เอกสาร
+          </button>
+          <button id="cb-save-goto-dashboard" style="
+            display:inline-flex;align-items:center;gap:6px;padding:10px 22px;
+            background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:12px;
+            font-size:14px;font-weight:600;cursor:pointer;border:none;transition:background 0.2s;
+          " onmouseover="this.style.background='#e5e7eb'" onmouseout="this.style.background='#f3f4f6'">
+            <span class="material-symbols-outlined" style="font-size:18px">dashboard</span>
+            ไปหน้าภาพรวม
+          </button>
+        </div>
         <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#9ca3af;margin-top:2px">
           <span class="material-symbols-outlined" style="font-size:14px">arrow_back</span>
           กำลังกลับหน้าภาพรวมการจัดการ…
         </div>
       </div>`;
-    setTimeout(() => {
+    const autoRedirect = setTimeout(() => {
       const card = el.querySelector('.cb-toast-card');
       if (card) card.classList.add('cb-toast-leaving');
       setTimeout(() => {
         el.innerHTML = '';
-        // Clean up all Certificate Builder DOM elements before navigating
         ['cb-root', 'cb-toolbar', 'cb-sig-panel', 'cb-toast'].forEach(id => {
           document.getElementById(id)?.remove();
         });
         navigate('/admin/dashboard');
       }, 320);
-    }, 2400);
+    }, 8000);
+    const cancelAuto = () => { clearTimeout(autoRedirect); };
+    el.querySelector('#cb-save-print-btn')?.addEventListener('click', () => {
+      cancelAuto();
+      window.print();
+    });
+    el.querySelector('#cb-save-goto-dashboard')?.addEventListener('click', () => {
+      cancelAuto();
+      el.innerHTML = '';
+      ['cb-root', 'cb-toolbar', 'cb-sig-panel', 'cb-toast'].forEach(id => {
+        document.getElementById(id)?.remove();
+      });
+      navigate('/admin/dashboard');
+    });
   };
 
 

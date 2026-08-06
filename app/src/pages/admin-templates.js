@@ -1,22 +1,31 @@
 import { t, getLang } from '../lib/i18n.js';
-import { getTemplates as apiGetTemplates, createTemplate, updateTemplate, deleteTemplate } from '../lib/api.js';
+import { getTemplates as apiGetTemplates, createTemplate, updateTemplate, deleteTemplate, getTemplateCategories } from '../lib/api.js';
 import { isEnglishTemplate } from '../lib/hrms-helper.js';
 
 const TEMPLATE_EDITS_KEY = 'hrbp_template_edits';
 const SYSTEM_UPDATED_BY = '__system__';
 
-const CATEGORY_ICONS = {
+const DEFAULT_CATEGORY_ICONS = {
   'หนังสือรับรองการทำงาน': 'description',
   'หนังสือรับรองเงินเดือน': 'receipt_long',
   'หนังสือรับรองเพื่อทำวีซ่า': 'flight_takeoff',
   'อื่นๆ': 'article',
 };
-const CATEGORIES = Object.keys(CATEGORY_ICONS);
 
 let cachedTemplates = [];
+let cachedCategories = [];
 
 function getTemplates() {
   return cachedTemplates;
+}
+
+function getCategories() {
+  return cachedCategories;
+}
+
+function getCategoryIcon(catName) {
+  const found = cachedCategories.find(c => c.name === catName);
+  return found?.icon || DEFAULT_CATEGORY_ICONS[catName] || 'folder';
 }
 
 
@@ -24,10 +33,12 @@ function getEdits() {
   return JSON.parse(localStorage.getItem(TEMPLATE_EDITS_KEY) || '[]');
 }
 
-function addEdit(name) {
+function addEdit(action, name) {
   const edits = getEdits();
-  edits.unshift({ name, time: t('templates.justNow'), icon: CATEGORY_ICONS[Object.keys(CATEGORY_ICONS).find(k => name.includes(k))] || 'description' });
-  if (edits.length > 10) edits.length = 10;
+  const currentUser = JSON.parse(localStorage.getItem('hrbp_current_user') || '{}');
+  const user = currentUser.full_name || currentUser.email || 'HR';
+  edits.unshift({ action, name, user, time: new Date().toISOString() });
+  if (edits.length > 20) edits.length = 20;
   localStorage.setItem(TEMPLATE_EDITS_KEY, JSON.stringify(edits));
 }
 
@@ -52,7 +63,7 @@ body { font-family: 'Angsana New', 'TH Sarabun New', 'Sarabun', serif; color: #1
 .doc-title { font-size: 20pt; font-weight: 700; letter-spacing: 1px; margin-bottom: 8mm; text-align: center; }
 .doc-title-en { font-size: 16pt; font-weight: 400; letter-spacing: 0; text-align: left; }
 .body-text { font-size: 16pt; line-height: 1.75; text-align: justify; margin-bottom: 0; flex: 0 0 auto; }
-.body-text .field { display: inline-block; border-bottom: 1px solid #1a1a1a; min-width: 150px; padding: 0 4px; font-weight: 700; text-align: center; vertical-align: baseline; line-height: 1.2; text-indent: 0; }
+.body-text .field { display: inline-block; border-bottom: 1px solid #999; min-width: 150px; padding: 0 4px; font-weight: 700; text-align: center; vertical-align: baseline; line-height: 1.2; text-indent: 0; }
 sup { font-size: 0.62em; vertical-align: super; line-height: 0; font-weight: 400; }
 .purpose-line { margin-top: 8mm; font-size: 16pt; }
 .salary-line { margin-top: 2px; }
@@ -289,8 +300,9 @@ async function patchWorkCertTemplates(existing) {
 
 export async function seedTemplates() {
   try {
-    const res = await apiGetTemplates();
+    const [res, catRes] = await Promise.all([apiGetTemplates(), getTemplateCategories()]);
     let existing = res.data || res || [];
+    cachedCategories = catRes.data || catRes || [];
     // Clear and re-seed if the templates list is not exactly our 3 templates
     const hasCorrectTemplates = existing.length === 3 && existing.every(t => ['tpl-work-th', 'tpl-work-en', 'tpl-visa-abroad'].includes(t.id));
     if (!hasCorrectTemplates) {
@@ -378,11 +390,6 @@ export function renderAdminTemplates() {
           <p class="text-white/80 text-label-sm max-w-md">${t('templates.heroSub')}</p>
           <div class="flex gap-6 mt-3 pt-3 border-t border-white/20">
             <div>
-              <p class="hero-stat-value text-xl font-bold leading-none mb-0.5">85%</p>
-              <p class="text-[10px] text-white/70 uppercase tracking-widest">${t('templates.statSatisfaction')}</p>
-            </div>
-            <div class="w-px bg-white/20"></div>
-            <div>
               <p class="hero-stat-value text-xl font-bold leading-none mb-0.5">${totalIssued}</p>
               <p class="text-[10px] text-white/70 uppercase tracking-widest">${t('templates.statTotal')}</p>
             </div>
@@ -392,19 +399,29 @@ export function renderAdminTemplates() {
 
       <div class="bg-surface-container-lowest rounded-xl p-4 border border-outline-variant shadow-sm flex flex-col">
         <h3 class="text-label-lg font-bold text-on-surface mb-3">${t('templates.recentEdits')}</h3>
-        <div class="flex-1 flex flex-col gap-3">
-          ${edits.length ? edits.map(edit => `
-            <div class="flex items-center gap-3 group cursor-pointer">
-              <div class="w-9 h-9 rounded-lg bg-surface-container-low flex items-center justify-center text-primary group-hover:bg-primary-container transition-colors">
-                <span class="material-symbols-outlined">${edit.icon}</span>
+        <div class="flex-1 flex flex-col gap-2 overflow-y-auto max-h-[200px]">
+          ${edits.length ? edits.map(edit => {
+            const action = edit.action || 'edited';
+            const user = edit.user || '—';
+            const actionKey = `templates.action${action.charAt(0).toUpperCase() + action.slice(1)}`;
+            const actionText = t(actionKey) || action;
+            const d = new Date(edit.time);
+            const isValidDate = !isNaN(d.getTime());
+            const timeStr = isValidDate
+              ? d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) + ' ' + d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
+              : (edit.time || '—');
+            const icon = action === 'created' ? 'add_circle' : action === 'edited' ? 'edit' : action === 'enabled' ? 'check_circle' : 'visibility_off';
+            return `
+            <div class="flex items-start gap-3 py-2 border-b border-outline-variant/30 last:border-0">
+              <div class="w-8 h-8 rounded-lg bg-surface-container-low flex items-center justify-center text-primary shrink-0 mt-0.5">
+                <span class="material-symbols-outlined text-[16px]">${icon}</span>
               </div>
               <div class="flex-1 min-w-0">
-                <p class="text-label-md font-bold text-on-surface truncate group-hover:text-primary transition-colors">${edit.name}</p>
-                <p class="text-label-sm text-outline">${edit.time}</p>
+                <p class="text-label-sm text-on-surface leading-tight"><span class="font-bold">${actionText}</span> <span class="font-semibold text-primary">${edit.name}</span></p>
+                <p class="text-[11px] text-outline mt-0.5">${user} · ${timeStr}</p>
               </div>
-              <span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors">chevron_right</span>
-            </div>
-          `).join('') : `<p class="text-label-sm text-outline">${t('templates.noEdits')}</p>`}
+            </div>`;
+          }).join('') : `<p class="text-label-sm text-outline">${t('templates.noEdits')}</p>`}
         </div>
       </div>
     </div>
@@ -468,14 +485,14 @@ export function renderAdminTemplates() {
             </div>
             <div>
               <label class="block text-label-md font-semibold text-on-surface-variant mb-2">${t('templates.labelCategory')} <span class="text-error">*</span></label>
-              <select id="field-category" class="w-full bg-white border border-outline-variant rounded-xl px-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-on-surface font-medium">
+              <select id="field-category" class="w-full bg-white border border-outline-variant rounded-xl pl-4 pr-10 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-on-surface font-medium">
                 <option value="">${t('templates.categoryDefault')}</option>
-                ${CATEGORIES.map(c => `<option value="${c}">${c}</option>`).join('')}
+                ${cachedCategories.map(c => `<option value="${c.name}">${c.name}</option>`).join('')}
               </select>
             </div>
             <div>
               <label class="block text-label-md font-semibold text-on-surface-variant mb-2">${t('templates.tableLanguage')} <span class="text-error">*</span></label>
-              <select id="field-language" class="w-full bg-white border border-outline-variant rounded-xl px-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-on-surface font-medium">
+              <select id="field-language" class="w-full bg-white border border-outline-variant rounded-xl pl-4 pr-10 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-on-surface font-medium">
                 <option value="th">${t('templates.langThai')}</option>
                 <option value="en">${t('templates.langEnglish')}</option>
                 <option value="both">${t('templates.langBoth')}</option>
@@ -532,9 +549,9 @@ async function renderTemplateTable(container) {
   if (heroEl) {
     heroEl.textContent = t('templates.heroActive', { count: totalActive });
   }
-  const statEls = container.querySelectorAll('.lg\\:col-span-2 .hero-stat-value');
-  if (statEls.length >= 2) {
-    statEls[1].textContent = totalIssued;
+  const totalIssuedEl = container.querySelector('.lg\\:col-span-2 .hero-stat-value');
+  if (totalIssuedEl) {
+    totalIssuedEl.textContent = totalIssued;
   }
 
   const filterStatus = sessionStorage.getItem('template-filter') || '';
@@ -569,7 +586,7 @@ async function renderTemplateTable(container) {
           <td class="px-6 py-4">
             <div class="flex items-center gap-4">
               <div class="w-10 h-10 rounded bg-primary-fixed/50 text-primary flex items-center justify-center border border-primary/10 shrink-0 group-hover:bg-primary-fixed transition-colors">
-                <span class="material-symbols-outlined text-[20px]">${tmpl.icon || CATEGORY_ICONS[tmpl.category] || 'description'}</span>
+                <span class="material-symbols-outlined text-[20px]">${tmpl.icon || getCategoryIcon(tmpl.category) || 'description'}</span>
               </div>
               <div>
                 <p class="text-label-md font-bold text-on-surface group-hover:text-primary transition-colors">${tmpl.name}</p>
@@ -809,6 +826,15 @@ export async function initAdminTemplates(container) {
 
   await seedTemplates();
   if (signal.aborted) return () => ac.abort();
+
+  const catSelect = container.querySelector('#field-category');
+  if (catSelect && cachedCategories.length) {
+    const currentVal = catSelect.value;
+    catSelect.innerHTML = `<option value="">${t('templates.categoryDefault')}</option>` +
+      cachedCategories.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+    if (currentVal) catSelect.value = currentVal;
+  }
+
   await renderTemplateTable(container);
   if (signal.aborted) return () => ac.abort();
 
@@ -917,10 +943,10 @@ export async function initAdminTemplates(container) {
             updatedAt: new Date().toISOString(),
             updatedBy: currentUser.full_name || currentUser.email || 'HR',
             updated_by: currentUser.full_name || currentUser.email || 'HR',
-            icon: CATEGORY_ICONS[category] || 'description',
+            icon: getCategoryIcon(category),
           };
           await updateTemplate(editId, updatedTmpl);
-          addEdit(name);
+          addEdit('edited', name);
           showToast(t('templates.saveToast'));
         }
       } else {
@@ -939,10 +965,10 @@ export async function initAdminTemplates(container) {
           createdAt: new Date().toISOString(),
           updatedBy: currentUser.full_name || currentUser.email || 'HR',
           updated_by: currentUser.full_name || currentUser.email || 'HR',
-          icon: CATEGORY_ICONS[category] || 'description',
+          icon: getCategoryIcon(category),
         };
         await createTemplate(newTmpl);
-        addEdit(name);
+        addEdit('created', name);
         showToast(t('templates.createToast'));
       }
 
@@ -991,12 +1017,12 @@ export async function initAdminTemplates(container) {
     if (isDisabling) {
       current.status = 'disabled';
       current.statusLabel = t('status.disabled');
-      addEdit(t('common.disable') + ': ' + current.name);
+      addEdit('disabled', current.name);
       showToast(t('templates.disableToast'));
     } else {
       current.status = 'draft';
       current.statusLabel = t('status.draft');
-      addEdit(t('common.enable') + ': ' + current.name);
+      addEdit('enabled', current.name);
       showToast(t('templates.enableToast'));
     }
     current.updatedAt = new Date().toISOString();

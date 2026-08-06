@@ -5,6 +5,7 @@
 import { getBusinessUnits, createBusinessUnit, updateBusinessUnit, deleteBusinessUnit } from '../lib/api.js';
 import { getPickupLocations, createPickupLocation, updatePickupLocation, deletePickupLocation } from '../lib/api.js';
 import { getDeliveryMethods, createDeliveryMethod, updateDeliveryMethod, deleteDeliveryMethod } from '../lib/api.js';
+import { getTemplateCategories, createTemplateCategory, updateTemplateCategory, deleteTemplateCategory } from '../lib/api.js';
 import { getCertMasterData, setCertMasterData } from '../lib/api.js';
 import { t } from '../lib/i18n.js';
 import { getCertDownloadDays, setCertDownloadDays, MIN_CERT_DOWNLOAD_DAYS, MAX_CERT_DOWNLOAD_DAYS } from '../lib/download-policy.js';
@@ -49,23 +50,34 @@ export function renderAdminSettings() {
           <span class="material-symbols-outlined">local_shipping</span>
           <span>${t('settings.tabDelivery')}</span>
         </button>
+        <button id="settings-tab-tplcat" class="settings-tab flex items-center gap-3 px-4 py-3 bg-surface-container text-on-surface-variant font-bold rounded-lg transition-colors text-left hover:bg-surface-container-high" data-tab="tplcat">
+          <span class="material-symbols-outlined">category</span>
+          <span>${t('settings.tabTplCategories')}</span>
+        </button>
       </div>
 
       <!-- ===== BU Section ===== -->
       <div id="settings-section-bu" class="flex-1 bg-surface-container-lowest border border-outline-variant rounded-xl p-6 shadow-sm">
         <div class="flex justify-between items-center mb-6">
           <h3 class="text-headline-md font-bold text-on-surface">${t('settings.buTitle')}</h3>
-          <button id="add-bu-btn" class="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-lg font-label-md hover:opacity-90 transition-opacity shadow-sm">
-            <span class="material-symbols-outlined text-[18px]">add</span>
-            ${t('settings.buAdd')}
-          </button>
+          <div class="flex items-center gap-3">
+            <label class="flex items-center gap-2 cursor-pointer text-label-sm text-on-surface-variant">
+              <input type="checkbox" id="bu-hide-inactive" class="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary/20" />
+              <span>${t('settings.buHideInactive')}</span>
+            </label>
+            <button id="add-bu-btn" class="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-lg font-label-md hover:opacity-90 transition-opacity shadow-sm">
+              <span class="material-symbols-outlined text-[18px]">add</span>
+              ${t('settings.buAdd')}
+            </button>
+          </div>
         </div>
         <div class="overflow-x-auto">
           <table class="w-full text-left">
             <thead>
               <tr class="border-b border-outline-variant bg-surface-container-low">
                 <th class="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase">${t('settings.buName')}</th>
-                <th class="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase text-right w-32">${t('settings.buManage')}</th>
+                <th class="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase text-center w-24">${t('settings.status')}</th>
+                <th class="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase text-right w-20">${t('settings.buManage')}</th>
               </tr>
             </thead>
             <tbody id="bu-tbody" class="divide-y divide-outline-variant">
@@ -187,22 +199,29 @@ export function renderAdminSettings() {
       <div id="settings-section-pickup" class="flex-1 bg-surface-container-lowest border border-outline-variant rounded-xl p-6 shadow-sm hidden">
         <div class="flex justify-between items-center mb-6">
           <h3 class="text-headline-md font-bold text-on-surface">${t('settings.pickupTitle')}</h3>
-          <button id="add-pickup-btn" class="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-lg font-label-md hover:opacity-90 transition-opacity shadow-sm">
-            <span class="material-symbols-outlined text-[18px]">add</span>
-            ${t('settings.pickupAdd')}
-          </button>
+          <div class="flex items-center gap-3">
+            <label class="flex items-center gap-2 cursor-pointer text-label-sm text-on-surface-variant">
+              <input type="checkbox" id="pickup-hide-inactive" class="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary/20" />
+              <span>${t('settings.buHideInactive')}</span>
+            </label>
+            <button id="add-pickup-btn" class="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-lg font-label-md hover:opacity-90 transition-opacity shadow-sm">
+              <span class="material-symbols-outlined text-[18px]">add</span>
+              ${t('settings.pickupAdd')}
+            </button>
+          </div>
         </div>
         <div class="overflow-x-auto">
           <table class="w-full text-left">
             <thead>
               <tr class="border-b border-outline-variant bg-surface-container-low">
                 <th class="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase">${t('settings.pickupName')}</th>
-                <th class="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase text-right w-32">${t('settings.pickupManage')}</th>
+                <th class="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase text-center w-24">${t('settings.status')}</th>
+                <th class="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase text-right w-20">${t('settings.pickupManage')}</th>
               </tr>
             </thead>
             <tbody id="pickup-tbody" class="divide-y divide-outline-variant">
               <tr>
-                <td colspan="2" class="px-6 py-8 text-center text-on-surface-variant font-medium">
+                <td colspan="3" class="px-6 py-8 text-center text-on-surface-variant font-medium">
                   <div class="flex items-center justify-center gap-2">
                     <span class="material-symbols-outlined animate-spin text-[20px] text-primary">sync</span>
                     <span>${t('common.loading')}</span>
@@ -218,10 +237,16 @@ export function renderAdminSettings() {
       <div id="settings-section-delivery" class="flex-1 bg-surface-container-lowest border border-outline-variant rounded-xl p-6 shadow-sm hidden">
         <div class="flex justify-between items-center mb-6">
           <h3 class="text-headline-md font-bold text-on-surface">${t('settings.deliveryTitle')}</h3>
-          <button id="add-delivery-btn" class="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-lg font-label-md hover:opacity-90 transition-opacity shadow-sm">
-            <span class="material-symbols-outlined text-[18px]">add</span>
-            ${t('settings.deliveryAdd')}
-          </button>
+          <div class="flex items-center gap-3">
+            <label class="flex items-center gap-2 cursor-pointer text-label-sm text-on-surface-variant">
+              <input type="checkbox" id="delivery-hide-inactive" class="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary/20" />
+              <span>${t('settings.buHideInactive')}</span>
+            </label>
+            <button id="add-delivery-btn" class="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-lg font-label-md hover:opacity-90 transition-opacity shadow-sm">
+              <span class="material-symbols-outlined text-[18px]">add</span>
+              ${t('settings.deliveryAdd')}
+            </button>
+          </div>
         </div>
         <p class="text-label-sm text-on-surface-variant mb-6">${t('settings.deliveryDesc')}</p>
         <div class="overflow-x-auto">
@@ -229,12 +254,51 @@ export function renderAdminSettings() {
             <thead>
               <tr class="border-b border-outline-variant bg-surface-container-low">
                 <th class="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase">${t('settings.deliveryName')}</th>
-                <th class="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase text-right w-32">${t('settings.deliveryManage')}</th>
+                <th class="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase text-center w-24">${t('settings.status')}</th>
+                <th class="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase text-right w-20">${t('settings.deliveryManage')}</th>
               </tr>
             </thead>
             <tbody id="delivery-tbody" class="divide-y divide-outline-variant">
               <tr>
-                <td colspan="2" class="px-6 py-8 text-center text-on-surface-variant font-medium">
+                <td colspan="3" class="px-6 py-8 text-center text-on-surface-variant font-medium">
+                  <div class="flex items-center justify-center gap-2">
+                    <span class="material-symbols-outlined animate-spin text-[20px] text-primary">sync</span>
+                    <span>${t('common.loading')}</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ===== Template Categories Section ===== -->
+      <div id="settings-section-tplcat" class="flex-1 bg-surface-container-lowest border border-outline-variant rounded-xl p-6 shadow-sm hidden">
+        <div class="flex justify-between items-center mb-6">
+          <h3 class="text-headline-md font-bold text-on-surface">${t('settings.tplCatTitle')}</h3>
+          <div class="flex items-center gap-3">
+            <label class="flex items-center gap-2 cursor-pointer text-label-sm text-on-surface-variant">
+              <input type="checkbox" id="tplcat-hide-inactive" class="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary/20" />
+              <span>${t('settings.buHideInactive')}</span>
+            </label>
+            <button id="add-tplcat-btn" class="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-lg font-label-md hover:opacity-90 transition-opacity shadow-sm">
+              <span class="material-symbols-outlined text-[18px]">add</span>
+              ${t('settings.tplCatAdd')}
+            </button>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left">
+            <thead>
+              <tr class="border-b border-outline-variant bg-surface-container-low">
+                <th class="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase">${t('settings.tplCatName')}</th>
+                <th class="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase text-center w-24">${t('settings.status')}</th>
+                <th class="px-6 py-4 text-label-sm font-bold text-on-surface-variant uppercase text-right w-20">${t('settings.tplCatManage')}</th>
+              </tr>
+            </thead>
+            <tbody id="tplcat-tbody" class="divide-y divide-outline-variant">
+              <tr>
+                <td colspan="3" class="px-6 py-8 text-center text-on-surface-variant font-medium">
                   <div class="flex items-center justify-center gap-2">
                     <span class="material-symbols-outlined animate-spin text-[20px] text-primary">sync</span>
                     <span>${t('common.loading')}</span>
@@ -314,6 +378,31 @@ export function renderAdminSettings() {
           </div>
           <div class="flex gap-3 pt-4">
             <button type="button" id="delivery-modal-cancel" class="flex-1 py-2.5 border border-outline-variant text-on-surface-variant hover:bg-surface-container rounded-xl font-bold transition-all">${t('common.cancel')}</button>
+            <button type="submit" class="flex-1 py-2.5 bg-primary text-on-primary hover:opacity-90 rounded-xl font-bold transition-all shadow-md">${t('common.save')}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ===== Template Category Modal ===== -->
+    <div id="tplcat-modal" class="fixed inset-0 z-[100] flex items-center justify-center p-4 hidden">
+      <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" id="tplcat-modal-backdrop"></div>
+      <div class="relative bg-surface-container-lowest rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-fade-in">
+        <div class="h-1.5 bg-primary w-full"></div>
+        <div class="flex items-center justify-between px-6 pt-5 pb-3">
+          <h3 class="text-title-md font-bold text-on-surface" id="tplcat-modal-title">${t('settings.tplCatModalTitle')}</h3>
+          <button id="tplcat-modal-close" class="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-surface-container-high text-outline transition-colors">
+            <span class="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
+        <form id="tplcat-form" class="p-6 space-y-4">
+          <input type="hidden" id="tplcat-id" />
+          <div>
+            <label class="block text-label-sm font-semibold text-on-surface-variant mb-1">${t('settings.tplCatNameLabel')}</label>
+            <input type="text" id="tplcat-name" required class="w-full bg-white border border-outline-variant rounded-xl px-4 py-2.5 text-body-md text-on-surface focus:border-primary outline-none" placeholder="${t('settings.tplCatNamePlaceholder')}" />
+          </div>
+          <div class="flex gap-3 pt-4">
+            <button type="button" id="tplcat-modal-cancel" class="flex-1 py-2.5 border border-outline-variant text-on-surface-variant hover:bg-surface-container rounded-xl font-bold transition-all">${t('common.cancel')}</button>
             <button type="submit" class="flex-1 py-2.5 bg-primary text-on-primary hover:opacity-90 rounded-xl font-bold transition-all shadow-md">${t('common.save')}</button>
           </div>
         </form>
@@ -487,6 +576,35 @@ export function renderAdminSettings() {
         </div>
       </div>
     </div>
+
+    <!-- ===== Notes Modal ===== -->
+    <div id="notes-modal" class="fixed inset-0 z-[100] flex items-center justify-center p-4 hidden">
+      <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" id="notes-modal-backdrop"></div>
+      <div class="relative bg-surface-container-lowest rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-fade-in">
+        <div class="h-1.5 bg-primary w-full"></div>
+        <div class="flex items-center justify-between px-6 pt-5 pb-3">
+          <h3 class="text-title-md font-bold text-on-surface" id="notes-modal-title">${t('settings.notesAdd')}</h3>
+          <button id="notes-modal-close" class="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-surface-container-high text-outline transition-colors">
+            <span class="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
+        <div class="px-6 pb-6 space-y-4">
+          <input type="hidden" id="notes-edit-index" value="" />
+          <div>
+            <label class="block text-label-sm font-semibold text-on-surface-variant mb-1">${t('settings.notesLabelTh')} <span class="text-error">*</span></label>
+            <textarea id="notes-th-input" rows="3" class="w-full bg-white border border-outline-variant rounded-xl px-4 py-2.5 text-body-md text-on-surface focus:border-primary outline-none resize-none" placeholder="${t('settings.notesPlaceholderTh')}"></textarea>
+          </div>
+          <div>
+            <label class="block text-label-sm font-semibold text-on-surface-variant mb-1">${t('settings.notesLabelEn')}</label>
+            <textarea id="notes-en-input" rows="3" class="w-full bg-white border border-outline-variant rounded-xl px-4 py-2.5 text-body-md text-on-surface focus:border-primary outline-none resize-none" placeholder="${t('settings.notesPlaceholderEn')}"></textarea>
+          </div>
+          <div class="flex gap-3 pt-2">
+            <button id="notes-modal-cancel" class="flex-1 py-2.5 border border-outline-variant text-on-surface-variant hover:bg-surface-container rounded-xl font-bold transition-all">${t('common.cancel')}</button>
+            <button id="notes-modal-save" class="flex-1 py-2.5 bg-primary text-on-primary hover:opacity-90 rounded-xl font-bold transition-all shadow-md">${t('common.save')}</button>
+          </div>
+        </div>
+      </div>
+    </div>
   `;
 }
 
@@ -496,6 +614,7 @@ export async function initAdminSettings(container) {
   const sectionPickup = container.querySelector('#settings-section-pickup');
   const sectionCert = container.querySelector('#settings-section-cert');
   const sectionDelivery = container.querySelector('#settings-section-delivery');
+  const sectionTplCat = container.querySelector('#settings-section-tplcat');
   container.querySelectorAll('.settings-tab').forEach(tab => {
     tab.addEventListener('click', () => {
       container.querySelectorAll('.settings-tab').forEach(t => {
@@ -509,9 +628,13 @@ export async function initAdminSettings(container) {
       sectionPickup?.classList.toggle('hidden', target !== 'pickup');
       sectionCert?.classList.toggle('hidden', target !== 'cert');
       sectionDelivery?.classList.toggle('hidden', target !== 'delivery');
+      sectionTplCat?.classList.toggle('hidden', target !== 'tplcat');
       if (target === 'cert') {
         loadDownloadPolicySettings();
         loadCertMasterData();
+      }
+      if (target === 'tplcat') {
+        loadTplCategories();
       }
     });
   });
@@ -529,6 +652,7 @@ export async function initAdminSettings(container) {
   const buBackdrop = container.querySelector('#bu-modal-backdrop');
 
   let currentBUs = [];
+  let hideInactiveBU = false;
 
   const loadBUs = async () => {
     try {
@@ -537,43 +661,56 @@ export async function initAdminSettings(container) {
       renderBUs();
     } catch (err) {
       console.error('Error fetching BUs:', err);
-      buTbody.innerHTML = `<tr><td colspan="2" class="px-6 py-8 text-center text-error font-medium">${t('error.loadData')}</td></tr>`;
+      buTbody.innerHTML = `<tr><td colspan="3" class="px-6 py-8 text-center text-error font-medium">${t('error.loadData')}</td></tr>`;
     }
   };
 
   const renderBUs = () => {
-    if (currentBUs.length === 0) {
-      buTbody.innerHTML = `<tr><td colspan="2" class="px-6 py-8 text-center text-on-surface-variant font-medium">${t('settings.buEmpty')}</td></tr>`;
+    const filtered = hideInactiveBU ? currentBUs.filter(b => (b.status || 'active') === 'active') : currentBUs;
+    if (filtered.length === 0) {
+      buTbody.innerHTML = `<tr><td colspan="3" class="px-6 py-8 text-center text-on-surface-variant font-medium">${t('settings.buEmpty')}</td></tr>`;
       return;
     }
-    buTbody.innerHTML = currentBUs.map(bu => `
-      <tr class="hover:bg-surface-container-low transition-colors group">
-        <td class="px-6 py-4"><span class="inline-block px-3 py-1 bg-primary-fixed/20 text-primary rounded-lg border border-primary/10 font-bold">${bu.name}</span></td>
+    buTbody.innerHTML = filtered.map(bu => {
+      const isActive = (bu.status || 'active') === 'active';
+      return `
+      <tr class="hover:bg-surface-container-low transition-colors group ${!isActive ? 'opacity-50' : ''}">
+        <td class="px-6 py-4">
+          <div class="flex items-center gap-3">
+            <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg ${isActive ? 'bg-primary/10 text-primary' : 'bg-outline/10 text-outline'}">
+              <span class="material-symbols-outlined text-[18px]">domain</span>
+            </span>
+            <span class="font-bold text-on-surface">${bu.name}</span>
+          </div>
+        </td>
+        <td class="px-6 py-4 text-center">
+          <button class="toggle-status-btn relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isActive ? 'bg-primary' : 'bg-outline'}" data-id="${bu.id}" data-status="${isActive ? 'active' : 'inactive'}" title="${isActive ? t('settings.toggleOn') : t('settings.toggleOff')}">
+            <span class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${isActive ? 'translate-x-6' : 'translate-x-1'}"></span>
+          </button>
+        </td>
         <td class="px-6 py-4 text-right">
           <div class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
             <button class="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors edit-bu-btn" data-id="${bu.id}" title="${t('common.edit')}"><span class="material-symbols-outlined text-[18px]">edit</span></button>
-            <button class="p-2 text-error hover:bg-error-container rounded-lg transition-colors delete-bu-btn" data-id="${bu.id}" title="${t('common.delete')}"><span class="material-symbols-outlined text-[18px]">delete</span></button>
           </div>
         </td>
       </tr>
-    `).join('');
+    `}).join('');
     buTbody.querySelectorAll('.edit-bu-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const bu = currentBUs.find(b => String(b.id) === btn.dataset.id);
         if (bu) openBUModal(bu);
       });
     });
-    buTbody.querySelectorAll('.delete-bu-btn').forEach(btn => {
+    buTbody.querySelectorAll('.toggle-status-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
-        if (confirm(t('settings.buDeleteConfirm'))) {
-          try {
-            await deleteBusinessUnit(btn.dataset.id);
-            currentBUs = currentBUs.filter(b => String(b.id) !== btn.dataset.id);
-            renderBUs();
-          } catch (err) {
-            console.error('Error deleting BU:', err);
-            alert(t('settings.buDeleteError'));
-          }
+        const newStatus = btn.dataset.status === 'active' ? 'inactive' : 'active';
+        try {
+          await updateBusinessUnit(btn.dataset.id, { status: newStatus });
+          const bu = currentBUs.find(b => String(b.id) === btn.dataset.id);
+          if (bu) bu.status = newStatus;
+          renderBUs();
+        } catch (err) {
+          console.error('Error toggling BU status:', err);
         }
       });
     });
@@ -593,6 +730,10 @@ export async function initAdminSettings(container) {
     const id = buIdInput.value;
     const name = buNameInput.value.trim();
     if (!name) return;
+    if (!id) {
+      const dup = currentBUs.find(b => b.name.toLowerCase() === name.toLowerCase());
+      if (dup) { alert(t('settings.buDuplicate')); return; }
+    }
     try {
       if (id) {
         await updateBusinessUnit(id, name);
@@ -615,6 +756,12 @@ export async function initAdminSettings(container) {
   buCancelBtn?.addEventListener('click', closeBUModal);
   buBackdrop?.addEventListener('click', closeBUModal);
 
+  const buHideInactive = container.querySelector('#bu-hide-inactive');
+  buHideInactive?.addEventListener('change', (e) => {
+    hideInactiveBU = e.target.checked;
+    renderBUs();
+  });
+
   // ── Pickup Locations logic ────────────────────
   const pickupTbody = container.querySelector('#pickup-tbody');
   const addPickupBtn = container.querySelector('#add-pickup-btn');
@@ -628,6 +775,7 @@ export async function initAdminSettings(container) {
   const pickupBackdrop = container.querySelector('#pickup-modal-backdrop');
 
   let currentPickups = [];
+  let hideInactivePickup = false;
 
   const loadPickups = async () => {
     try {
@@ -636,43 +784,56 @@ export async function initAdminSettings(container) {
       renderPickups();
     } catch (err) {
       console.error('Error fetching pickup locations:', err);
-      pickupTbody.innerHTML = `<tr><td colspan="2" class="px-6 py-8 text-center text-error font-medium">${t('error.loadData')}</td></tr>`;
+      pickupTbody.innerHTML = `<tr><td colspan="3" class="px-6 py-8 text-center text-error font-medium">${t('error.loadData')}</td></tr>`;
     }
   };
 
   const renderPickups = () => {
-    if (currentPickups.length === 0) {
-      pickupTbody.innerHTML = `<tr><td colspan="2" class="px-6 py-8 text-center text-on-surface-variant font-medium">${t('settings.pickupEmpty')}</td></tr>`;
+    const filtered = hideInactivePickup ? currentPickups.filter(p => (p.status || 'active') === 'active') : currentPickups;
+    if (filtered.length === 0) {
+      pickupTbody.innerHTML = `<tr><td colspan="3" class="px-6 py-8 text-center text-on-surface-variant font-medium">${t('settings.pickupEmpty')}</td></tr>`;
       return;
     }
-    pickupTbody.innerHTML = currentPickups.map(p => `
-      <tr class="hover:bg-surface-container-low transition-colors group">
-        <td class="px-6 py-4"><span class="inline-block px-3 py-1 bg-primary-fixed/20 text-primary rounded-lg border border-primary/10 font-bold">${p.name}</span></td>
+    pickupTbody.innerHTML = filtered.map(p => {
+      const isActive = (p.status || 'active') === 'active';
+      return `
+      <tr class="hover:bg-surface-container-low transition-colors group ${!isActive ? 'opacity-50' : ''}">
+        <td class="px-6 py-4">
+          <div class="flex items-center gap-3">
+            <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg ${isActive ? 'bg-secondary-container text-on-secondary-container' : 'bg-outline/10 text-outline'}">
+              <span class="material-symbols-outlined text-[18px]">location_on</span>
+            </span>
+            <span class="font-bold text-on-surface">${p.name}</span>
+          </div>
+        </td>
+        <td class="px-6 py-4 text-center">
+          <button class="toggle-status-btn relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isActive ? 'bg-primary' : 'bg-outline'}" data-id="${p.id}" data-status="${isActive ? 'active' : 'inactive'}" title="${isActive ? t('settings.toggleOn') : t('settings.toggleOff')}">
+            <span class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${isActive ? 'translate-x-6' : 'translate-x-1'}"></span>
+          </button>
+        </td>
         <td class="px-6 py-4 text-right">
           <div class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
             <button class="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors edit-pickup-btn" data-id="${p.id}" title="${t('common.edit')}"><span class="material-symbols-outlined text-[18px]">edit</span></button>
-            <button class="p-2 text-error hover:bg-error-container rounded-lg transition-colors delete-pickup-btn" data-id="${p.id}" title="${t('common.delete')}"><span class="material-symbols-outlined text-[18px]">delete</span></button>
           </div>
         </td>
       </tr>
-    `).join('');
+    `}).join('');
     pickupTbody.querySelectorAll('.edit-pickup-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const p = currentPickups.find(pu => String(pu.id) === btn.dataset.id);
         if (p) openPickupModal(p);
       });
     });
-    pickupTbody.querySelectorAll('.delete-pickup-btn').forEach(btn => {
+    pickupTbody.querySelectorAll('.toggle-status-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
-        if (confirm(t('settings.pickupDeleteConfirm'))) {
-          try {
-            await deletePickupLocation(btn.dataset.id);
-            currentPickups = currentPickups.filter(p => String(p.id) !== btn.dataset.id);
-            renderPickups();
-          } catch (err) {
-            console.error('Error deleting pickup location:', err);
-            alert(t('settings.pickupDeleteError'));
-          }
+        const newStatus = btn.dataset.status === 'active' ? 'inactive' : 'active';
+        try {
+          await updatePickupLocation(btn.dataset.id, { status: newStatus });
+          const p = currentPickups.find(pu => String(pu.id) === btn.dataset.id);
+          if (p) p.status = newStatus;
+          renderPickups();
+        } catch (err) {
+          console.error('Error toggling pickup status:', err);
         }
       });
     });
@@ -718,6 +879,12 @@ export async function initAdminSettings(container) {
   pickupCancelBtn?.addEventListener('click', closePickupModal);
   pickupBackdrop?.addEventListener('click', closePickupModal);
 
+  const pickupHideInactive = container.querySelector('#pickup-hide-inactive');
+  pickupHideInactive?.addEventListener('change', (e) => {
+    hideInactivePickup = e.target.checked;
+    renderPickups();
+  });
+
   // ── Delivery Methods logic ───────────────────
   const deliveryTbody = container.querySelector('#delivery-tbody');
   const addDeliveryBtn = container.querySelector('#add-delivery-btn');
@@ -731,6 +898,7 @@ export async function initAdminSettings(container) {
   const deliveryBackdrop = container.querySelector('#delivery-modal-backdrop');
 
   let currentDeliveryMethods = [];
+  let hideInactiveDelivery = false;
 
   const loadDeliveryMethods = async () => {
     try {
@@ -739,43 +907,56 @@ export async function initAdminSettings(container) {
       renderDeliveryMethods();
     } catch (err) {
       console.error('Error fetching delivery methods:', err);
-      deliveryTbody.innerHTML = `<tr><td colspan="2" class="px-6 py-8 text-center text-error font-medium">${t('error.loadData')}</td></tr>`;
+      deliveryTbody.innerHTML = `<tr><td colspan="3" class="px-6 py-8 text-center text-error font-medium">${t('error.loadData')}</td></tr>`;
     }
   };
 
   const renderDeliveryMethods = () => {
-    if (currentDeliveryMethods.length === 0) {
-      deliveryTbody.innerHTML = `<tr><td colspan="2" class="px-6 py-8 text-center text-on-surface-variant font-medium">${t('settings.deliveryEmpty')}</td></tr>`;
+    const filtered = hideInactiveDelivery ? currentDeliveryMethods.filter(m => (m.status || 'active') === 'active') : currentDeliveryMethods;
+    if (filtered.length === 0) {
+      deliveryTbody.innerHTML = `<tr><td colspan="3" class="px-6 py-8 text-center text-on-surface-variant font-medium">${t('settings.deliveryEmpty')}</td></tr>`;
       return;
     }
-    deliveryTbody.innerHTML = currentDeliveryMethods.map(m => `
-      <tr class="hover:bg-surface-container-low transition-colors group">
-        <td class="px-6 py-4"><span class="inline-block px-3 py-1 bg-primary-fixed/20 text-primary rounded-lg border border-primary/10 font-bold">${m.name}</span></td>
+    deliveryTbody.innerHTML = filtered.map(m => {
+      const isActive = (m.status || 'active') === 'active';
+      return `
+      <tr class="hover:bg-surface-container-low transition-colors group ${!isActive ? 'opacity-50' : ''}">
+        <td class="px-6 py-4">
+          <div class="flex items-center gap-3">
+            <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg ${isActive ? 'bg-tertiary-container text-on-tertiary-container' : 'bg-outline/10 text-outline'}">
+              <span class="material-symbols-outlined text-[18px]">local_shipping</span>
+            </span>
+            <span class="font-bold text-on-surface">${m.name}</span>
+          </div>
+        </td>
+        <td class="px-6 py-4 text-center">
+          <button class="toggle-status-btn relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isActive ? 'bg-primary' : 'bg-outline'}" data-id="${m.id}" data-status="${isActive ? 'active' : 'inactive'}" title="${isActive ? t('settings.toggleOn') : t('settings.toggleOff')}">
+            <span class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${isActive ? 'translate-x-6' : 'translate-x-1'}"></span>
+          </button>
+        </td>
         <td class="px-6 py-4 text-right">
           <div class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
             <button class="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors edit-delivery-btn" data-id="${m.id}" title="${t('common.edit')}"><span class="material-symbols-outlined text-[18px]">edit</span></button>
-            <button class="p-2 text-error hover:bg-error-container rounded-lg transition-colors delete-delivery-btn" data-id="${m.id}" title="${t('common.delete')}"><span class="material-symbols-outlined text-[18px]">delete</span></button>
           </div>
         </td>
       </tr>
-    `).join('');
+    `}).join('');
     deliveryTbody.querySelectorAll('.edit-delivery-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const m = currentDeliveryMethods.find(d => String(d.id) === btn.dataset.id);
         if (m) openDeliveryModal(m);
       });
     });
-    deliveryTbody.querySelectorAll('.delete-delivery-btn').forEach(btn => {
+    deliveryTbody.querySelectorAll('.toggle-status-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
-        if (confirm(t('settings.deliveryDeleteConfirm'))) {
-          try {
-            await deleteDeliveryMethod(btn.dataset.id);
-            currentDeliveryMethods = currentDeliveryMethods.filter(m => String(m.id) !== btn.dataset.id);
-            renderDeliveryMethods();
-          } catch (err) {
-            console.error('Error deleting delivery method:', err);
-            alert(t('settings.deliveryDeleteError'));
-          }
+        const newStatus = btn.dataset.status === 'active' ? 'inactive' : 'active';
+        try {
+          await updateDeliveryMethod(btn.dataset.id, { status: newStatus });
+          const m = currentDeliveryMethods.find(d => String(d.id) === btn.dataset.id);
+          if (m) m.status = newStatus;
+          renderDeliveryMethods();
+        } catch (err) {
+          console.error('Error toggling delivery status:', err);
         }
       });
     });
@@ -821,7 +1002,136 @@ export async function initAdminSettings(container) {
   deliveryCancelBtn?.addEventListener('click', closeDeliveryModal);
   deliveryBackdrop?.addEventListener('click', closeDeliveryModal);
 
+  const deliveryHideInactive = container.querySelector('#delivery-hide-inactive');
+  deliveryHideInactive?.addEventListener('change', (e) => {
+    hideInactiveDelivery = e.target.checked;
+    renderDeliveryMethods();
+  });
+
   loadDeliveryMethods();
+
+  // ── Template Categories logic ──────────────────
+  const tplCatTbody = container.querySelector('#tplcat-tbody');
+  const addTplCatBtn = container.querySelector('#add-tplcat-btn');
+  const tplCatModal = container.querySelector('#tplcat-modal');
+  const tplCatModalTitle = container.querySelector('#tplcat-modal-title');
+  const tplCatForm = container.querySelector('#tplcat-form');
+  const tplCatIdInput = container.querySelector('#tplcat-id');
+  const tplCatNameInput = container.querySelector('#tplcat-name');
+  const tplCatCloseBtn = container.querySelector('#tplcat-modal-close');
+  const tplCatCancelBtn = container.querySelector('#tplcat-modal-cancel');
+  const tplCatBackdrop = container.querySelector('#tplcat-modal-backdrop');
+
+  let currentTplCats = [];
+  let hideInactiveTplCat = false;
+
+  const loadTplCategories = async () => {
+    try {
+      const result = await getTemplateCategories();
+      currentTplCats = result.data || [];
+      renderTplCategories();
+    } catch (err) {
+      console.error('Error fetching template categories:', err);
+      tplCatTbody.innerHTML = `<tr><td colspan="3" class="px-6 py-8 text-center text-error font-medium">${t('error.loadData')}</td></tr>`;
+    }
+  };
+
+  const renderTplCategories = () => {
+    const filtered = hideInactiveTplCat ? currentTplCats.filter(c => (c.status || 'active') === 'active') : currentTplCats;
+    if (filtered.length === 0) {
+      tplCatTbody.innerHTML = `<tr><td colspan="3" class="px-6 py-8 text-center text-on-surface-variant font-medium">${t('settings.tplCatEmpty')}</td></tr>`;
+      return;
+    }
+    tplCatTbody.innerHTML = currentTplCats.map(cat => {
+      const isActive = (cat.status || 'active') === 'active';
+      return `
+      <tr class="hover:bg-surface-container-low transition-colors group ${!isActive ? 'opacity-50' : ''}">
+        <td class="px-6 py-4">
+          <div class="flex items-center gap-3">
+            <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg ${isActive ? 'bg-primary/10 text-primary' : 'bg-outline/10 text-outline'}">
+              <span class="material-symbols-outlined text-[18px]">${cat.icon || 'folder'}</span>
+            </span>
+            <span class="font-bold text-on-surface">${cat.name}</span>
+          </div>
+        </td>
+        <td class="px-6 py-4 text-center">
+          <button class="tplcat-toggle-btn relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isActive ? 'bg-primary' : 'bg-outline'}" data-id="${cat.id}" data-status="${isActive ? 'active' : 'inactive'}" title="${isActive ? t('settings.toggleOn') : t('settings.toggleOff')}">
+            <span class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${isActive ? 'translate-x-6' : 'translate-x-1'}"></span>
+          </button>
+        </td>
+        <td class="px-6 py-4 text-right">
+          <div class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button class="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors edit-tplcat-btn" data-id="${cat.id}" title="${t('common.edit')}"><span class="material-symbols-outlined text-[18px]">edit</span></button>
+          </div>
+        </td>
+      </tr>
+    `}).join('');
+    tplCatTbody.querySelectorAll('.edit-tplcat-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const cat = currentTplCats.find(c => String(c.id) === btn.dataset.id);
+        if (cat) openTplCatModal(cat);
+      });
+    });
+    tplCatTbody.querySelectorAll('.tplcat-toggle-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const newStatus = btn.dataset.status === 'active' ? 'inactive' : 'active';
+        try {
+          await updateTemplateCategory(btn.dataset.id, { status: newStatus });
+          const cat = currentTplCats.find(c => String(c.id) === btn.dataset.id);
+          if (cat) cat.status = newStatus;
+          renderTplCategories();
+        } catch (err) {
+          console.error('Error toggling category status:', err);
+        }
+      });
+    });
+  };
+
+  const openTplCatModal = (cat = null) => {
+    tplCatModalTitle.textContent = t('settings.tplCatModalTitle');
+    tplCatIdInput.value = cat ? cat.id : '';
+    tplCatNameInput.value = cat ? cat.name : '';
+    tplCatModal.classList.remove('hidden');
+    tplCatNameInput.focus();
+  };
+  const closeTplCatModal = () => tplCatModal?.classList.add('hidden');
+
+  addTplCatBtn?.addEventListener('click', () => openTplCatModal());
+  tplCatCloseBtn?.addEventListener('click', closeTplCatModal);
+  tplCatCancelBtn?.addEventListener('click', closeTplCatModal);
+  tplCatBackdrop?.addEventListener('click', closeTplCatModal);
+
+  tplCatForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = tplCatIdInput.value;
+    const name = tplCatNameInput.value.trim();
+    if (!name) return;
+    if (!id) {
+      const dup = currentTplCats.find(c => c.name.toLowerCase() === name.toLowerCase());
+      if (dup) { alert(t('settings.tplCatDuplicate')); return; }
+    }
+    try {
+      if (id) {
+        await updateTemplateCategory(id, { name });
+        const cat = currentTplCats.find(c => String(c.id) === id);
+        if (cat) cat.name = name;
+      } else {
+        const result = await createTemplateCategory(name);
+        if (result.data?.length) currentTplCats.push(result.data[0]);
+      }
+      renderTplCategories();
+      closeTplCatModal();
+    } catch (err) {
+      console.error('Error saving template category:', err);
+      alert(t('settings.tplCatSaveError'));
+    }
+  });
+
+  const tplCatHideInactive = container.querySelector('#tplcat-hide-inactive');
+  tplCatHideInactive?.addEventListener('change', (e) => {
+    hideInactiveTplCat = e.target.checked;
+    renderTplCategories();
+  });
 
   // ── Certificate Master Data ──────────────────
   let certData = {};
@@ -1301,9 +1611,14 @@ export async function initAdminSettings(container) {
             ${escapeHtml(text)}${textEn ? ` <span class="text-outline">(${escapeHtml(textEn)})</span>` : ''}
           </td>
           <td class="px-4 py-2 text-right">
-            <button class="btn-remove-note p-1 text-outline hover:text-error hover:bg-error/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100" data-index="${idx}" title="${t('common.delete')}">
-              <span class="material-symbols-outlined text-[14px]">delete</span>
-            </button>
+            <div class="flex justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button class="btn-edit-note p-1 text-primary hover:bg-primary/10 rounded-lg transition-colors" data-index="${idx}" title="${t('common.edit')}">
+                <span class="material-symbols-outlined text-[14px]">edit</span>
+              </button>
+              <button class="btn-remove-note p-1 text-outline hover:text-error hover:bg-error/10 rounded-lg transition-colors" data-index="${idx}" title="${t('common.delete')}">
+                <span class="material-symbols-outlined text-[14px]">delete</span>
+              </button>
+            </div>
           </td>
         </tr>`);
     notesTbody.innerHTML = rows.length
@@ -1311,15 +1626,63 @@ export async function initAdminSettings(container) {
       : '<tr><td colspan="2" class="px-4 py-4 text-center text-on-surface-variant text-label-sm">' + t('settings.notesEmpty') + '</td></tr>';
   };
 
-  container.querySelector('#btn-add-note')?.addEventListener('click', () => {
-    const val = prompt(t('settings.notesPrompt'));
-    if (val && val.trim()) {
-      const valEn = prompt(t('settings.notesPromptEn'));
-      const list = certData.notes || [];
-      list.push({ text: val.trim(), text_en: (valEn && valEn.trim()) ? valEn.trim() : '' });
-      saveCert('notes', list);
-      renderNotes();
+  const notesModal = container.querySelector('#notes-modal');
+  const notesThInput = container.querySelector('#notes-th-input');
+  const notesEnInput = container.querySelector('#notes-en-input');
+  const notesEditIndex = container.querySelector('#notes-edit-index');
+  const notesModalTitle = container.querySelector('#notes-modal-title');
+
+  const openNotesModal = (editIdx = null) => {
+    notesEditIndex.value = editIdx !== null ? String(editIdx) : '';
+    if (editIdx !== null) {
+      const item = (certData.notes || [])[editIdx];
+      const norm = normalizeNoteItem(item);
+      notesThInput.value = norm.text;
+      notesEnInput.value = norm.text_en;
+      notesModalTitle.textContent = t('settings.notesEdit') || t('settings.notesAdd');
+    } else {
+      notesThInput.value = '';
+      notesEnInput.value = '';
+      notesModalTitle.textContent = t('settings.notesAdd');
     }
+    notesModal?.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    notesThInput.focus();
+  };
+
+  const closeNotesModal = () => {
+    notesModal?.classList.add('hidden');
+    document.body.style.overflow = '';
+  };
+
+  container.querySelector('#notes-modal-close')?.addEventListener('click', closeNotesModal);
+  container.querySelector('#notes-modal-cancel')?.addEventListener('click', closeNotesModal);
+  container.querySelector('#notes-modal-backdrop')?.addEventListener('click', closeNotesModal);
+
+  container.querySelector('#notes-modal-save')?.addEventListener('click', () => {
+    const text = notesThInput.value.trim();
+    const textEn = notesEnInput.value.trim();
+    if (!text) { notesThInput.focus(); return; }
+    const list = certData.notes || [];
+    const editIdx = notesEditIndex.value !== '' ? parseInt(notesEditIndex.value) : null;
+    if (editIdx !== null && editIdx < list.length) {
+      const norm = normalizeNoteItem(list[editIdx]);
+      list[editIdx] = { text, text_en: textEn || norm.text_en };
+    } else {
+      list.push({ text, text_en: textEn });
+    }
+    saveCert('notes', list);
+    renderNotes();
+    closeNotesModal();
+  });
+
+  container.querySelector('#btn-add-note')?.addEventListener('click', () => openNotesModal());
+
+  container.addEventListener('click', (e) => {
+    const btn = e.target.closest('.btn-edit-note');
+    if (!btn) return;
+    const idx = parseInt(btn.getAttribute('data-index'));
+    openNotesModal(idx);
   });
 
   container.addEventListener('click', (e) => {

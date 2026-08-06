@@ -53,6 +53,8 @@ function mapRequestRow(r, userRow) {
     position: userRow?.position || '',
     start_date: userRow?.start_date || '',
     company_name: userRow?.company_name || '',
+    fname_e: userRow?.fname_e || '',
+    lname_e: userRow?.lname_e || '',
     hr_officer: meta.hr_officer || null,
     acknowledged_by: meta.acknowledged_by || null,
     eta_date: meta.eta_date || '',
@@ -219,6 +221,13 @@ export async function onRequest(context) {
         params.push(status);
       }
     }
+    if (search) {
+      const like = `%${search}%`;
+      conditions.push(
+        "(r.request_code LIKE ? OR r.purpose LIKE ? OR json_extract(r.request_data, '$.type') LIKE ? OR json_extract(r.request_data, '$.purpose') LIKE ?)"
+      );
+      params.push(like, like, like, like);
+    }
 
     const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
 
@@ -252,14 +261,6 @@ export async function onRequest(context) {
       start_date: r.user_start_date,
       company_name: r.user_company_name,
     }));
-
-    if (search) {
-      mapped = mapped.filter((r) =>
-        (r.request_code || '').toLowerCase().includes(search) ||
-        (r.type || '').toLowerCase().includes(search) ||
-        (r.purpose || '').toLowerCase().includes(search)
-      );
-    }
 
     const statsConditions = [];
     const statsParams = [];

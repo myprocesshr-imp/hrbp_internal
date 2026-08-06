@@ -68,15 +68,6 @@ export function renderLoginPage() {
               </div>
             </div>
 
-            <!-- Remember + Forgot -->
-            <div class="flex items-center justify-between">
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" class="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary/20" />
-                <span class="text-label-md text-on-surface-variant">${t('login.remember')}</span>
-              </label>
-              <a href="#" class="text-label-md text-primary font-semibold hover:underline">${t('login.forgot')}</a>
-            </div>
-
             <!-- Error message -->
             <div id="login-error" class="hidden bg-error-container text-on-error-container px-4 py-3 rounded-lg text-label-md font-medium">
               <span class="material-symbols-outlined text-[16px] mr-1 align-text-bottom">error</span>
@@ -310,6 +301,14 @@ export function initLoginPage(container) {
 
       console.log('[login] 3. empId after IDMS:', empId);
 
+      // If IDMS auth failed (wrong password or service down), block login entirely
+      if (idmsFailed && !empId) {
+        setLoading(loginSubmitBtn, false, t('login.loginBtn'), 'login');
+        errorDiv.textContent = t('login.loginError');
+        errorDiv.classList.remove('hidden');
+        return;
+      }
+
       if (isProductionHost()) {
         if (!empId) {
           empId = `EMP-${Date.now()}`;
@@ -362,7 +361,10 @@ export function initLoginPage(container) {
         // 4. Auto-provisioning: Fetch Profile from HRMS
         let profile = null;
         try {
-          const hrmsRes = await fetch(`/api/hrms/employee/${empId}`);
+          const hrmsController = new AbortController();
+          const hrmsTimeout = setTimeout(() => hrmsController.abort(), 10000);
+          const hrmsRes = await fetch(`/api/hrms/employee/${empId}`, { signal: hrmsController.signal });
+          clearTimeout(hrmsTimeout);
           if (hrmsRes.ok) {
             const hrmsData = await hrmsRes.json();
             if (hrmsData?.data?.employee) {
@@ -442,9 +444,9 @@ export function initLoginPage(container) {
         confirmForm.classList.remove('hidden');
       }
     } catch (error) {
-      console.error('[login] CATCH:', error);
+      console.error('[login] CATCH:', error?.message || error, error?.stack || '');
       if (errorDiv) {
-        errorDiv.textContent = t('login.connError');
+        errorDiv.textContent = t('login.connError') + (error?.message ? ` (${error.message})` : '');
         errorDiv.classList.remove('hidden');
       }
     } finally {

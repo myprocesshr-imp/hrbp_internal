@@ -38,10 +38,16 @@ export async function onRequest(context) {
   // PUT /api/business-units/:id — update
   if (method === 'PUT') {
     const id = url.pathname.split('/').pop();
-    const { name } = await request.json();
-    if (!name) return json({ error: 'Name is required' }, 400);
+    const { name, status } = await request.json();
 
-    await env.DB.prepare('UPDATE business_units SET name = ? WHERE id = ?').bind(name, id).run();
+    const updates = [];
+    const params = [];
+    if (name !== undefined) { updates.push('name = ?'); params.push(name); }
+    if (status !== undefined) { updates.push('status = ?'); params.push(status); }
+    if (updates.length === 0) return json({ error: 'No fields to update' }, 400);
+
+    params.push(id);
+    await env.DB.prepare(`UPDATE business_units SET ${updates.join(', ')} WHERE id = ?`).bind(...params).run();
     const bu = await env.DB.prepare('SELECT * FROM business_units WHERE id = ?').bind(id).first();
     return json({ data: [bu] });
   }
