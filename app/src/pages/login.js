@@ -270,12 +270,18 @@ export function initLoginPage(container) {
       console.log('[login] 2. IDMS URL:', idmsUrl);
       
       let idmsFailed = false;
+      let idmsNetworkError = false;
       try {
         const idmsController = new AbortController();
         const idmsTimeout = setTimeout(() => idmsController.abort(), 10000);
         const idmsRes = await fetch(idmsUrl, { signal: idmsController.signal });
         clearTimeout(idmsTimeout);
-        if (!idmsRes.ok) idmsFailed = true;
+        if (!idmsRes.ok) {
+          idmsFailed = true;
+          // 504 from the proxy means the upstream IDMS server timed out — the
+          // credentials were never even checked, so this is NOT a wrong-password.
+          if (idmsRes.status === 504 || idmsRes.status >= 500) idmsNetworkError = true;
+        }
         const idmsText = await idmsRes.text();
         // Assume API returns something like [{"Result":"OK","EmpId":"10005208"}] or JSON
         let idmsData;
@@ -296,6 +302,7 @@ export function initLoginPage(container) {
         }
       } catch (err) {
         idmsFailed = true;
+        idmsNetworkError = true;
         console.warn('[login] IDMS API Fetch Error', err);
       }
 
@@ -304,7 +311,7 @@ export function initLoginPage(container) {
       // If IDMS auth failed (wrong password or service down), block login entirely
       if (idmsFailed && !empId) {
         setLoading(loginSubmitBtn, false, t('login.loginBtn'), 'login');
-        errorDiv.textContent = t('login.loginError');
+        errorDiv.textContent = idmsNetworkError ? t('login.idmsUnavailable') : t('login.loginError');
         errorDiv.classList.remove('hidden');
         return;
       }
